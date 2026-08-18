@@ -62,9 +62,8 @@ export default function Sidebar({ activeTab }: SidebarProps) {
 
     // 4. Employee Menu (Individual Level)
     const employeeMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Bàn làm việc của tôi', path: '/dashboard' },
-        { id: 'book', icon: CalendarPlus, label: 'Đặt phòng & Thiết bị', path: '/dashboard' },
-        { id: 'my-bookings', icon: Calendar, label: 'Lịch cá nhân của tôi', path: '/dashboard' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Đặt phòng & Thiết bị', path: '/dashboard' },
+        { id: 'my-bookings', icon: Calendar, label: 'Lịch sử', path: '/dashboard/my-bookings' },
     ];
 
     // Select specific menu for active role

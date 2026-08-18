@@ -129,19 +129,19 @@ export default function ManagerDashboardPage() {
                 {/* Content */}
                 <div className="p-8">
                     {/* Title */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Cổng Phê Duyệt Manager</h1>
                         <p className="text-gray-500 text-sm">Xem xét và phê duyệt các đơn xin mượn tài nguyên văn phòng từ nhân viên.</p>
-                    </div>
+                    </div> */}
 
-                    {statusMsg && (
+                    {/* {statusMsg && (
                         <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-xl font-medium">
                             {statusMsg}
                         </div>
-                    )}
+                    )} */}
 
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    {/* <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
                             <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                                 <Clock size={24} />
@@ -181,7 +181,7 @@ export default function ManagerDashboardPage() {
                                 <p className="text-2xl font-extrabold text-gray-900">{bookings.length}</p>
                             </div>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Filter Tabs */}
                     <div className="flex gap-2 mb-6">

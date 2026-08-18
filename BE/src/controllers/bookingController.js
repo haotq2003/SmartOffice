@@ -107,7 +107,7 @@ const createBooking = async (req, res) => {
     const currentUser = await User.findById(req.user.userId);
     const creatorName = currentUser ? currentUser.name : 'Nhân viên';
 
-    // 1. Notify tenant managers
+    // 1. Notify tenant managers via In-App notification ONLY (No Email)
     createAndSendNotification({
       tenantId: req.user.tenantId,
       title: `Yêu cầu đặt lịch mới: ${resource.name}`,
@@ -115,24 +115,17 @@ const createBooking = async (req, res) => {
       type: 'booking_created',
       referenceId: booking._id,
       targetRole: 'managers',
-      emailData: {
-        resourceName: resource.name,
-        startTime: start,
-        endTime: end,
-        status: initialStatus,
-        notes
-      }
     });
 
-    // 2. Notify the creator (Confirmation)
+    // 2. Notify the creator (In-App notification always, Email ONLY if auto-approved)
     createAndSendNotification({
       tenantId: req.user.tenantId,
       userId: req.user.userId,
-      title: `Đặt lịch ${resource.name} thành công`,
+      title: `Đặt lịch ${resource.name} ${initialStatus === 'approved' ? 'thành công' : 'đang chờ duyệt'}`,
       message: `Bạn đã tạo yêu cầu đặt ${resource.name}. Trạng thái: ${initialStatus === 'approved' ? 'Đã duyệt' : 'Chờ phê duyệt'}.`,
       type: 'booking_created',
       referenceId: booking._id,
-      emailData: {
+      emailData: initialStatus === 'approved' ? {
         recipientEmail: currentUser?.email,
         recipientName: creatorName,
         resourceName: resource.name,
@@ -140,13 +133,12 @@ const createBooking = async (req, res) => {
         endTime: end,
         status: initialStatus,
         notes
-      }
+      } : null
     });
 
-    // 3. Send Meeting Invites to all invited attendees via Email & In-App Notification
-    if (attendeesList.length > 0) {
+    // 3. Send Meeting Invites ONLY if initial status is approved (e.g. auto approve)
+    if (initialStatus === 'approved' && attendeesList.length > 0) {
       attendeesList.forEach(async (email) => {
-        // Send Email Invitation
         sendEmail({
           to: email,
           subject: `[SmartOffice] Thư mời họp: ${resource.name}`,
@@ -160,7 +152,6 @@ const createBooking = async (req, res) => {
           text: `Thư mời họp từ ${creatorName} tại ${resource.name} lúc ${start.toLocaleString('vi-VN')}`
         });
 
-        // Check if attendee is a registered user in same tenant
         const attendeeUser = await User.findOne({ email, tenantId: req.user.tenantId });
         if (attendeeUser) {
           createAndSendNotification({
@@ -289,32 +280,66 @@ const updateBookingStatus = async (req, res) => {
       { _id: id, tenantId: req.user.tenantId },
       { status },
       { new: true }
-    ).populate('userId', 'name email').populate('resourceId', 'name type');
+    ).populate('userId', 'name email').populate('resourceId', 'name type location');
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking request not found.' });
     }
 
-    // Trigger notification to the booking creator
+    // 1. Trigger notification & email to the booking creator (Employee)
     if (booking.userId) {
-      const statusText = status === 'approved' ? 'đã được Phê duyệt' : status === 'rejected' ? 'đã bị Từ chối' : 'đã cập nhật về Chờ duyệt';
+      const statusText = status === 'approved' ? 'đã được Phê duyệt thành công' : status === 'rejected' ? 'đã bị Từ chối' : 'đã cập nhật về Chờ duyệt';
       const type = status === 'approved' ? 'booking_approved' : status === 'rejected' ? 'booking_rejected' : 'booking_created';
 
       createAndSendNotification({
         tenantId: req.user.tenantId,
         userId: booking.userId._id,
         title: `Đơn đặt ${booking.resourceId?.name || 'Tài nguyên'} ${statusText}`,
-        message: `Đơn đặt lịch từ ${new Date(booking.startTime).toLocaleString('vi-VN')} đến ${new Date(booking.endTime).toLocaleString('vi-VN')} của bạn ${statusText}.`,
+        message: `Đơn mượn/đặt lịch của bạn cho ${booking.resourceId?.name || 'Tài nguyên'} ${statusText}.${status === 'approved' ? ` Vui lòng tới ${booking.resourceId?.location || 'Phòng thiết bị'} để nhận đồ.` : ''}`,
         type,
         referenceId: booking._id,
         emailData: {
           recipientEmail: booking.userId.email,
           recipientName: booking.userId.name,
           resourceName: booking.resourceId?.name || 'Tài nguyên',
+          location: booking.resourceId?.location || 'Phòng thiết bị',
           startTime: booking.startTime,
           endTime: booking.endTime,
           status: booking.status,
           notes: booking.notes
+        }
+      });
+    }
+
+    // 2. If status is APPROVED, send Meeting Invites to all invited attendees via Email
+    if (status === 'approved' && Array.isArray(booking.attendees) && booking.attendees.length > 0) {
+      const organizerName = booking.userId ? booking.userId.name : 'Người tạo lịch';
+      const resourceName = booking.resourceId ? booking.resourceId.name : 'Phòng họp';
+
+      booking.attendees.forEach(async (email) => {
+        sendEmail({
+          to: email,
+          subject: `[SmartOffice] Thư mời họp: ${resourceName}`,
+          html: generateMeetingInviteHtml({
+            organizerName,
+            resourceName,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            notes: booking.notes
+          }),
+          text: `Thư mời họp từ ${organizerName} tại ${resourceName} lúc ${new Date(booking.startTime).toLocaleString('vi-VN')}`
+        });
+
+        const attendeeUser = await User.findOne({ email, tenantId: req.user.tenantId });
+        if (attendeeUser) {
+          createAndSendNotification({
+            tenantId: req.user.tenantId,
+            userId: attendeeUser._id,
+            title: `Thư mời tham dự họp: ${resourceName}`,
+            message: `${organizerName} đã thêm bạn vào danh sách tham dự họp tại ${resourceName} (${new Date(booking.startTime).toLocaleString('vi-VN')}).`,
+            type: 'booking_approved',
+            referenceId: booking._id
+          });
         }
       });
     }

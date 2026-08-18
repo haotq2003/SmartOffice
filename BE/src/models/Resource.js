@@ -16,6 +16,10 @@ const resourceSchema = new mongoose.Schema(
     capacity: {
       type: Number,
     },
+    quantity: {
+      type: Number,
+      default: 1,
+    },
     location: {
       type: String,
     },

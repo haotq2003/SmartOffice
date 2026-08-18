@@ -28,6 +28,11 @@ const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware')
  *         notes:
  *           type: string
  *           description: Optional notes for the booking request
+ *         attendees:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: List of attendee email addresses
  */
 
 /**
@@ -94,7 +99,7 @@ router.get('/bookings/my-bookings', verifyToken, getMyBookings);
  *       500:
  *         description: Server error
  */
-router.get('/bookings/all', verifyToken, authorizeRoles('admin', 'manager'), getAllBookings);
+router.get('/bookings/all', verifyToken, authorizeRoles('manager'), getAllBookings);
 
 /**
  * @swagger
@@ -133,7 +138,7 @@ router.get('/bookings/all', verifyToken, authorizeRoles('admin', 'manager'), get
  *       500:
  *         description: Server error
  */
-router.patch('/bookings/:id/status', verifyToken, authorizeRoles('admin', 'manager'), updateBookingStatus);
+router.patch('/bookings/:id/status', verifyToken, authorizeRoles('manager'), updateBookingStatus);
 
 /**
  * @swagger

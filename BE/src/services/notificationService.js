@@ -17,11 +17,11 @@ const createAndSendNotification = async ({
   emailData = null, // { recipientEmail, recipientName, resourceName, startTime, endTime, status, notes }
 }) => {
   try {
-    // 1. If targetRole is 'managers', notify all managers/admins of the tenant
+    // 1. If targetRole is 'managers', notify all managers of the tenant
     if (targetRole === 'managers') {
       const managers = await User.find({
         tenantId,
-        role: { $in: ['manager', 'admin', 'super_admin'] },
+        role: 'manager',
       });
 
       const notifications = await Promise.all(

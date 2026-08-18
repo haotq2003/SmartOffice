@@ -61,6 +61,7 @@ export interface ResourceInput {
   name: string;
   type: 'room' | 'vehicle' | 'equipment';
   capacity?: number;
+  quantity?: number;
   location?: string;
   description?: string;
   images?: string[];
@@ -74,6 +75,7 @@ export interface Resource {
   name: string;
   type: 'room' | 'vehicle' | 'equipment';
   capacity?: number;
+  quantity?: number;
   location?: string;
   description?: string;
   images?: string[];
@@ -106,9 +108,11 @@ export interface Booking {
 }
 
 export interface AvailabilitySlot {
+  bookingId?: string;
   startTime: string;
   endTime: string;
   status: string;
+  user?: { name: string; email: string } | null;
 }
 
 // Notification Interface
