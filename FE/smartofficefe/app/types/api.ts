@@ -92,6 +92,7 @@ export interface BookingInput {
   endTime: string;   // ISO string
   notes?: string;
   attendees?: string[];
+  quantity?: number;
 }
 
 export interface Booking {
@@ -101,7 +102,8 @@ export interface Booking {
   resourceId: Resource | string;
   startTime: string;
   endTime: string;
-  status: 'pending' | 'approved' | 'rejected' | 'confirmed' | 'cancelled';
+  status: 'pending' | 'approved' | 'rejected' | 'confirmed' | 'checked_in' | 'returned' | 'overdue' | 'cancelled' | 'no_show';
+  quantity?: number;
   notes?: string;
   attendees?: string[];
   createdAt?: string;
@@ -138,4 +140,14 @@ export interface NotificationResponseData {
     total: number;
     totalPages: number;
   };
+}
+export interface Plan {
+  _id: string;
+  name: string;
+  code: string;
+  price: number;
+  maxUsers: number;
+  maxResources: number;
+  features: string[];
+  description?: string;
 }

@@ -94,8 +94,28 @@ export default function ResourceManagementPage() {
             name: '',
             type: 'room',
             capacity: 10,
+            quantity: 1,
             location: '',
             description: '',
+            images: [],
+            isAutoApprove: false,
+        });
+        setErrorMsg(null);
+        setStatusMsg(null);
+        setIsModalOpen(true);
+    };
+
+    const handleOpenEditModal = (res: Resource) => {
+        setEditingResource(res);
+        setFormData({
+            name: res.name,
+            type: res.type,
+            capacity: res.capacity || 1,
+            quantity: res.quantity || 1,
+            location: res.location || '',
+            description: res.description || '',
+            images: res.images || [],
+            isAutoApprove: res.isAutoApprove || false,
         });
         setErrorMsg(null);
         setStatusMsg(null);
@@ -136,18 +156,7 @@ export default function ResourceManagementPage() {
         }
     };
 
-    const handleToggleStatus = async (resource: Resource) => {
-        const newStatus = resource.status === 'maintenance' ? 'available' : 'maintenance';
-        try {
-            const res = await resourceService.updateResource(resource._id, { status: newStatus } as any);
-            if (res.success) {
-                setStatusMsg(`Đã cập nhật trạng thái ${resource.name} thành ${newStatus === 'maintenance' ? 'Đang bảo trì' : 'Sẵn sàng'}.`);
-                fetchResources();
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
+
 
     const handleDeleteResource = async (id: string, name: string) => {
         if (!confirm(`Bạn có chắc chắn muốn xóa tài nguyên "${name}" không?`)) return;
@@ -158,8 +167,9 @@ export default function ResourceManagementPage() {
                 setStatusMsg(`Đã xóa tài nguyên ${name} thành công.`);
                 fetchResources();
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
+            setErrorMsg(err.response?.data?.message || `Không thể xóa tài nguyên ${name}.`);
         }
     };
 
@@ -172,14 +182,12 @@ export default function ResourceManagementPage() {
     const filteredResources = resources.filter((r) => {
         const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || (r.location && r.location.toLowerCase().includes(searchQuery.toLowerCase()));
         if (selectedTab === 'all') return matchesSearch;
-        if (selectedTab === 'maintenance') return matchesSearch && r.status === 'maintenance';
         return matchesSearch && r.type === selectedTab;
     });
 
     const roomCount = resources.filter(r => r.type === 'room').length;
     const vehicleCount = resources.filter(r => r.type === 'vehicle').length;
     const equipmentCount = resources.filter(r => r.type === 'equipment').length;
-    const maintenanceCount = resources.filter(r => r.status === 'maintenance').length;
 
     return (
         <div className="flex bg-gray-50 min-h-screen font-sans">
@@ -227,76 +235,31 @@ export default function ResourceManagementPage() {
 
                 {/* Content */}
                 <div className="p-8">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Quản lý Cơ sở Vật chất & Tài nguyên</h1>
-                            <p className="text-gray-500 text-sm">Khai báo, quản lý thông tin phòng họp, xe công tác, thiết bị và cấu hình bảo trì.</p>
-                        </div>
-                        <button
-                            onClick={handleOpenCreateModal}
-                            className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-100 cursor-pointer"
-                        >
-                            <Plus size={18} /> Thêm tài nguyên mới
-                        </button>
-                    </div>
+                    
 
                     {statusMsg && (
-                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl font-medium">
-                            {statusMsg}
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl font-medium flex justify-between items-center">
+                            <span>{statusMsg}</span>
+                            <button onClick={() => setStatusMsg(null)} className="text-xs font-bold opacity-60 hover:opacity-100">Đóng</button>
+                        </div>
+                    )}
+
+                    {errorMsg && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl font-medium flex justify-between items-center">
+                            <span>{errorMsg}</span>
+                            <button onClick={() => setErrorMsg(null)} className="text-xs font-bold opacity-60 hover:opacity-100">Đóng</button>
                         </div>
                     )}
 
                     {/* Stats overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                                <Building size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Phòng họp</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{roomCount}</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                                <Car size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Xe công tác</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{vehicleCount}</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                                <Laptop size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Thiết bị mượn</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{equipmentCount}</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                                <Wrench size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Đang bảo trì</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{maintenanceCount}</p>
-                            </div>
-                        </div>
-                    </div>
-
+                    
                     {/* Filter Tabs */}
                     <div className="flex gap-2 mb-6">
                         {[
                             { label: `Tất cả (${resources.length})`, value: 'all' },
                             { label: `Phòng họp (${roomCount})`, value: 'room' },
                             { label: `Xe công tác (${vehicleCount})`, value: 'vehicle' },
-                            { label: `Thiết bị (${equipmentCount})`, value: 'equipment' },
-                            { label: `Đang bảo trì (${maintenanceCount})`, value: 'maintenance' }
+                            { label: `Thiết bị (${equipmentCount})`, value: 'equipment' }
                         ].map((tab) => (
                             <button
                                 key={tab.value}
@@ -309,6 +272,12 @@ export default function ResourceManagementPage() {
                                 {tab.label}
                             </button>
                         ))}
+                        <button
+                            onClick={handleOpenCreateModal}
+                            className="ml-auto flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-100 cursor-pointer"
+                        >
+                            <Plus size={18} /> Thêm tài nguyên mới
+                        </button>
                     </div>
 
                     {/* Resource Grid */}
@@ -330,28 +299,19 @@ export default function ResourceManagementPage() {
                                         {res.images && res.images.length > 0 ? (
                                             <div className="h-40 -mx-6 -mt-6 mb-4 overflow-hidden relative bg-gray-100">
                                                 <img src={res.images[0]} alt={res.name} className="w-full h-full object-cover" />
-                                                <div className="absolute top-3 right-3">
-                                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 shadow-sm ${res.status === 'maintenance' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'}`}>
-                                                        {res.status === 'maintenance' ? <Wrench size={12} /> : <CheckCircle2 size={12} />}
-                                                        {res.status === 'maintenance' ? 'Đang bảo trì' : 'Sẵn sàng'}
-                                                    </span>
-                                                </div>
                                             </div>
                                         ) : (
                                             <div className="flex justify-between items-start mb-3">
                                                 <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${res.type === 'room' ? 'bg-blue-50 text-blue-600' : res.type === 'vehicle' ? 'bg-purple-50 text-purple-600' : 'bg-emerald-50 text-emerald-600'}`}>
                                                     {res.type}
                                                 </span>
-
-                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${res.status === 'maintenance' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-                                                    {res.status === 'maintenance' ? <Wrench size={12} /> : <CheckCircle2 size={12} />}
-                                                    {res.status === 'maintenance' ? 'Đang bảo trì' : 'Sẵn sàng'}
-                                                </span>
                                             </div>
                                         )}
 
                                         <h3 className="text-lg font-bold text-gray-900 mb-1">{res.name}</h3>
-                                        <p className="text-xs text-gray-400 mb-3">{res.location || 'Văn phòng chính'} • Sức chứa: {res.capacity || 1} người</p>
+                                        <p className="text-xs text-gray-400 mb-3">
+                                            {res.location || 'Văn phòng chính'} • {res.type === 'equipment' ? `Kho: ${res.quantity || 1} cái` : `Sức chứa: ${res.capacity || 1} người`}
+                                        </p>
 
                                         {res.isAutoApprove && (
                                             <span className="inline-block mb-3 px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded text-[10px] font-bold">
@@ -366,16 +326,12 @@ export default function ResourceManagementPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
+                                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
                                         <button
-                                            onClick={() => handleToggleStatus(res)}
-                                            className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 ${res.status === 'maintenance'
-                                                    ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                                }`}
+                                            onClick={() => handleOpenEditModal(res)}
+                                            className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5"
                                         >
-                                            <Wrench size={14} />
-                                            {res.status === 'maintenance' ? 'Mở lại' : 'Bảo trì'}
+                                            <Edit size={14} /> Chỉnh sửa
                                         </button>
 
                                         <button
@@ -447,16 +403,29 @@ export default function ResourceManagementPage() {
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label className="text-xs font-bold text-gray-700 block mb-1">Sức chứa (người)</label>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={formData.capacity || 1}
-                                        onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || 1 })}
-                                        className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-2.5 focus:bg-white focus:border-blue-600 outline-none transition-all"
-                                    />
-                                </div>
+                                {formData.type === 'equipment' ? (
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">Số lượng kho (cái)</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={formData.quantity || 1}
+                                            onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                                            className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-2.5 focus:bg-white focus:border-blue-600 outline-none transition-all font-bold"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">Sức chứa (người)</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={formData.capacity || 1}
+                                            onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || 1 })}
+                                            className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-2.5 focus:bg-white focus:border-blue-600 outline-none transition-all font-bold"
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div>

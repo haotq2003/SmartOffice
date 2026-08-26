@@ -15,7 +15,7 @@ const createResource = async (req, res) => {
 
 const getAllResources = async (req, res) => {
   try {
-    const resources = await resourceService.getAllResources(req.user.tenantId);
+    const resources = await resourceService.getAllResources(req.user.tenantId, req.query);
     res.status(200).json({ success: true, data: resources });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -54,6 +54,9 @@ const deleteResource = async (req, res) => {
     }
     res.status(200).json({ success: true, message: 'Resource deleted successfully' });
   } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };

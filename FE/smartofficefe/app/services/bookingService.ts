@@ -29,7 +29,7 @@ export const bookingService = {
   /**
    * Phê duyệt hoặc Từ chối đơn đặt lịch (Dành cho Admin / Manager)
    */
-  async updateBookingStatus(id: string, status: 'approved' | 'rejected' | 'pending'): Promise<ApiResponse<Booking>> {
+  async updateBookingStatus(id: string, status: 'approved' | 'rejected' | 'pending' | 'checked_in' | 'returned' | 'cancelled' | 'no_show'): Promise<ApiResponse<Booking>> {
     const response = await apiClient.patch<ApiResponse<Booking>>(`/bookings/${id}/status`, { status });
     return response.data;
   },

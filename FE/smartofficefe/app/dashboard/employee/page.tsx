@@ -21,12 +21,12 @@ export default function EmployeeDashboardPage() {
     const [selectedType, setSelectedType] = useState<'all' | 'room' | 'equipment'>('all');
 
     const filteredResources = resources.filter((r) => {
-        const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              (r.location && r.location.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (r.location && r.location.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesType = selectedType === 'all' || r.type === selectedType;
         return matchesSearch && matchesType;
     });
-    
+
     // Booking Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
@@ -112,14 +112,14 @@ export default function EmployeeDashboardPage() {
         setSelectedResource(resource);
         setErrorMsg(null);
         setSuccessMsg(null);
-        
+
         // Default start time: Today 09:00, End time: Today 10:00
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
-        
+
         setStartTime(`${todayStr}T09:00`);
         setEndTime(`${todayStr}T10:00`);
         setBorrowDate(todayStr);
@@ -157,8 +157,12 @@ export default function EmployeeDashboardPage() {
                 setErrorMsg('Vui lòng chọn ngày mượn và ngày trả thiết bị.');
                 return;
             }
-            startISO = new Date(`${borrowDate}T08:00:00`).toISOString();
-            endISO = new Date(`${returnDate}T17:30:00`).toISOString();
+            if (new Date(returnDate) < new Date(borrowDate)) {
+                setErrorMsg('Ngày trả không được nhỏ hơn ngày mượn.');
+                return;
+            }
+            startISO = new Date(`${borrowDate}T00:00:00.000`).toISOString();
+            endISO = new Date(`${returnDate}T23:59:59.999`).toISOString();
         } else {
             if (!startTime || !endTime) {
                 setErrorMsg('Vui lòng chọn thời gian bắt đầu và kết thúc.');
@@ -184,6 +188,7 @@ export default function EmployeeDashboardPage() {
                 endTime: endISO,
                 notes: formattedNotes,
                 attendees: attendeesList,
+                quantity: selectedResource.type === 'equipment' ? borrowQuantity : 1,
             });
 
             if (res.success) {
@@ -303,11 +308,10 @@ export default function EmployeeDashboardPage() {
                             <button
                                 key={tab.id}
                                 onClick={() => setSelectedType(tab.id as any)}
-                                className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                                    selectedType === tab.id
+                                className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all cursor-pointer ${selectedType === tab.id
                                         ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
                                         : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-100'
-                                }`}
+                                    }`}
                             >
                                 {tab.label}
                             </button>
@@ -376,7 +380,7 @@ export default function EmployeeDashboardPage() {
                                             {/* Content */}
                                             <div className="p-5">
                                                 <h3 className="text-base font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">{res.name}</h3>
-                                                
+
                                                 <div className="flex items-center gap-3 text-xs text-gray-500 mb-3 flex-wrap">
                                                     <span>{res.location || (res.type === 'equipment' ? 'Phòng thiết bị' : 'Văn phòng chính')}</span>
                                                     {res.type === 'room' ? (
@@ -397,13 +401,12 @@ export default function EmployeeDashboardPage() {
                                             <button
                                                 onClick={() => handleOpenBookingModal(res)}
                                                 disabled={!isAvailable}
-                                                className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
-                                                    !isAvailable 
+                                                className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm ${!isAvailable
                                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                                         : res.type === 'room'
-                                                        ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
-                                                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
-                                                }`}
+                                                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
+                                                            : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
+                                                    }`}
                                             >
                                                 <Plus size={16} /> {res.type === 'room' ? 'Đặt phòng họp' : 'Mượn thiết bị'}
                                             </button>
@@ -487,7 +490,7 @@ export default function EmployeeDashboardPage() {
                                                         {sTime} - {eTime}
                                                     </span>
                                                     <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
-                                                        {slot.status === 'approved' ? 'Đã duyệt' : 'Đang chờ duyệt'}
+                                                        {slot.status === 'checked_in' ? 'Đã giao thiết bị' : slot.status === 'approved' ? 'Đã duyệt' : 'Đang chờ duyệt'}
                                                     </span>
                                                 </div>
                                             );
@@ -607,9 +610,8 @@ export default function EmployeeDashboardPage() {
                                 <button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className={`flex-1 py-2.5 text-white rounded-xl font-bold text-xs transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer ${
-                                        selectedResource.type === 'equipment' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'
-                                    }`}
+                                    className={`flex-1 py-2.5 text-white rounded-xl font-bold text-xs transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer ${selectedResource.type === 'equipment' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'
+                                        }`}
                                 >
                                     {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : selectedResource.type === 'equipment' ? 'Gửi yêu cầu mượn' : 'Gửi yêu cầu đặt phòng'}
                                 </button>

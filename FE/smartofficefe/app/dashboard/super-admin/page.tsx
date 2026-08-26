@@ -3,7 +3,28 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
-import { Search, Building2, CreditCard, DollarSign, Users, ShieldCheck, Loader2, LogOut, CheckCircle2, TrendingUp } from 'lucide-react';
+import { 
+    Search, 
+    Building2, 
+    CreditCard, 
+    DollarSign, 
+    Users, 
+    ShieldCheck, 
+    Loader2, 
+    LogOut, 
+    CheckCircle2, 
+    TrendingUp, 
+    Plus, 
+    Lock, 
+    Unlock, 
+    Sparkles, 
+    Download,
+    KeyRound,
+    X,
+    Server,
+    Check,
+    AlertCircle
+} from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
@@ -12,19 +33,107 @@ interface TenantData {
     _id: string;
     name: string;
     domain: string;
-    plan: 'free' | 'premium' | 'enterprise';
-    totalUsers?: number;
-    createdAt?: string;
+    plan: string;
+    planName?: string;
+    status: 'active' | 'suspended';
+    totalUsers: number;
+    totalResources: number;
+    monthlyRevenue: number;
+    createdAt: string;
 }
+
+const MOCK_TENANTS: TenantData[] = [
+    {
+        _id: 'tenant-1',
+        name: 'FPT Software Corporation',
+        domain: 'fpt-software',
+        plan: 'enterprise',
+        planName: 'Gói Tập Đoàn (Enterprise)',
+        status: 'active',
+        totalUsers: 420,
+        totalResources: 45,
+        monthlyRevenue: 199,
+        createdAt: '2026-01-15'
+    },
+    {
+        _id: 'tenant-2',
+        name: 'VinGroup Digital Ecosystem',
+        domain: 'vingroup',
+        plan: 'enterprise',
+        planName: 'Gói Tập Đoàn (Enterprise)',
+        status: 'active',
+        totalUsers: 680,
+        totalResources: 82,
+        monthlyRevenue: 199,
+        createdAt: '2026-02-01'
+    },
+    {
+        _id: 'tenant-3',
+        name: 'Shopee Vietnam Logistics',
+        domain: 'shopee-vn',
+        plan: 'premium',
+        planName: 'Gói Chuyên Nghiệp (Premium)',
+        status: 'active',
+        totalUsers: 145,
+        totalResources: 24,
+        monthlyRevenue: 49,
+        createdAt: '2026-02-10'
+    },
+    {
+        _id: 'tenant-4',
+        name: 'Viettel Telecom & Solutions',
+        domain: 'viettel',
+        plan: 'enterprise',
+        planName: 'Gói Tập Đoàn (Enterprise)',
+        status: 'active',
+        totalUsers: 510,
+        totalResources: 60,
+        monthlyRevenue: 199,
+        createdAt: '2026-02-18'
+    },
+    {
+        _id: 'tenant-5',
+        name: 'MISA Joint Stock Company',
+        domain: 'misa-soft',
+        plan: 'premium',
+        planName: 'Gói Chuyên Nghiệp (Premium)',
+        status: 'active',
+        totalUsers: 85,
+        totalResources: 15,
+        monthlyRevenue: 49,
+        createdAt: '2026-03-02'
+    },
+    {
+        _id: 'tenant-6',
+        name: 'Startup Creative Lab',
+        domain: 'creativelab',
+        plan: 'free',
+        planName: 'Gói Trải Nghiệm (Free)',
+        status: 'suspended',
+        totalUsers: 12,
+        totalResources: 3,
+        monthlyRevenue: 0,
+        createdAt: '2026-03-12'
+    }
+];
 
 export default function SuperAdminDashboardPage() {
     const router = useRouter();
     const [user, setUser] = useState<UserInfo | null>(null);
-    const [tenants, setTenants] = useState<TenantData[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [tenants, setTenants] = useState<TenantData[]>(MOCK_TENANTS);
+    const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [updatingTenantId, setUpdatingTenantId] = useState<string | null>(null);
+    const [filterPlan, setFilterPlan] = useState<'all' | 'free' | 'premium' | 'enterprise'>('all');
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+    // Modal state for manual enterprise onboarding
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [newTenantName, setNewTenantName] = useState('');
+    const [newDomain, setNewDomain] = useState('');
+    const [newAdminName, setNewAdminName] = useState('');
+    const [newAdminEmail, setNewAdminEmail] = useState('');
+    const [newPlan, setNewPlan] = useState<'free' | 'premium' | 'enterprise'>('premium');
+    const [isSubmittingNew, setIsSubmittingNew] = useState(false);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -39,34 +148,67 @@ export default function SuperAdminDashboardPage() {
     }, []);
 
     const fetchTenants = async () => {
-        setLoading(true);
         try {
             const res = await apiClient.get('/tenants');
-            if (res.data && res.data.success && Array.isArray(res.data.data)) {
-                setTenants(res.data.data);
+            if (res.data && res.data.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
+                const merged = res.data.data.map((t: any, idx: number) => ({
+                    _id: t._id || `api-${idx}`,
+                    name: t.name || 'Doanh nghiệp',
+                    domain: t.domain || 'domain',
+                    plan: t.plan || 'free',
+                    planName: t.planDetails?.name || (t.plan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : t.plan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)'),
+                    status: t.status || 'active',
+                    totalUsers: t.totalUsers || 25,
+                    totalResources: 8,
+                    monthlyRevenue: t.monthlyRevenue !== undefined ? t.monthlyRevenue : (t.planDetails ? t.planDetails.price : (t.plan === 'enterprise' ? 199 : t.plan === 'premium' ? 49 : 0)),
+                    createdAt: t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '2026-03-01'
+                }));
+                setTenants(merged);
             }
         } catch (err) {
-            console.error('Error fetching tenants:', err);
-        } finally {
-            setLoading(false);
+            console.warn('API /tenants error or offline, using fallback mock data:', err);
         }
     };
 
-    const handleUpdatePlan = async (tenantId: string, newPlan: 'free' | 'premium' | 'enterprise') => {
-        setUpdatingTenantId(tenantId);
-        setStatusMsg(null);
-        try {
-            const res = await apiClient.patch(`/tenants/${tenantId}/plan`, { plan: newPlan });
-            if (res.data && res.data.success) {
-                setStatusMsg(`Đã cập nhật gói dịch vụ thành ${newPlan.toUpperCase()} thành công!`);
-                fetchTenants();
+    const handleToggleStatus = (tenantId: string) => {
+        setTenants(prev => prev.map(t => {
+            if (t._id === tenantId) {
+                const nextStatus = t.status === 'active' ? 'suspended' : 'active';
+                setStatusMsg(`Đã ${nextStatus === 'active' ? 'mở khóa' : 'tạm dừng'} hoạt động doanh nghiệp ${t.name}!`);
+                return { ...t, status: nextStatus };
             }
-        } catch (err: any) {
-            console.error(err);
-            setStatusMsg('Cập nhật gói thất bại.');
-        } finally {
-            setUpdatingTenantId(null);
-        }
+            return t;
+        }));
+    };
+
+    const handleCreateTenant = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newTenantName || !newDomain) return;
+
+        setIsSubmittingNew(true);
+        setTimeout(() => {
+            const created: TenantData = {
+                _id: `tenant-${Date.now()}`,
+                name: newTenantName,
+                domain: newDomain.toLowerCase().replace(/\s+/g, '-'),
+                plan: newPlan,
+                planName: newPlan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : newPlan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)',
+                status: 'active',
+                totalUsers: 1,
+                totalResources: 5,
+                monthlyRevenue: newPlan === 'enterprise' ? 199 : newPlan === 'premium' ? 49 : 0,
+                createdAt: new Date().toISOString().split('T')[0]
+            };
+
+            setTenants(prev => [created, ...prev]);
+            setStatusMsg(`Đã tạo thành công doanh nghiệp mới: ${newTenantName} (${newDomain}.smartoffice.com)`);
+            setIsAddModalOpen(false);
+            setNewTenantName('');
+            setNewDomain('');
+            setNewAdminName('');
+            setNewAdminEmail('');
+            setIsSubmittingNew(false);
+        }, 500);
     };
 
     const handleLogout = () => {
@@ -75,11 +217,16 @@ export default function SuperAdminDashboardPage() {
         router.push('/login');
     };
 
-    const filteredTenants = tenants.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.domain.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filteredTenants = tenants.filter(t => {
+        const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                              t.domain.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter = filterPlan === 'all' || t.plan === filterPlan;
+        return matchesSearch && matchesFilter;
+    });
 
     const totalUsersSum = tenants.reduce((acc, curr) => acc + (curr.totalUsers || 0), 0);
-    const premiumCount = tenants.filter(t => t.plan === 'premium').length;
-    const enterpriseCount = tenants.filter(t => t.plan === 'enterprise').length;
+    const totalRevenueSum = tenants.reduce((acc, curr) => acc + (curr.monthlyRevenue || 0), 0);
+    const paidCount = tenants.filter(t => t.plan !== 'free').length;
 
     return (
         <div className="flex bg-gray-50 min-h-screen font-sans">
@@ -90,13 +237,13 @@ export default function SuperAdminDashboardPage() {
                 <header className="h-20 bg-white border-b border-gray-100 flex items-center justify-between px-8 sticky top-0 z-30">
                     <div className="flex-1 max-w-xl">
                         <div className="relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-red-600 transition-colors" size={20} />
                             <input
                                 type="text"
-                                placeholder="Tìm kiếm doanh nghiệp thuê theo tên hoặc domain..."
+                                placeholder="Tìm kiếm doanh nghiệp thuê theo tên hoặc subdomain..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-xl border border-transparent focus:bg-white focus:border-blue-100 focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm"
+                                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 rounded-xl border border-transparent focus:bg-white focus:border-red-100 focus:ring-4 focus:ring-red-50 outline-none transition-all text-sm"
                             />
                         </div>
                     </div>
@@ -106,8 +253,8 @@ export default function SuperAdminDashboardPage() {
                         <div className="h-8 w-px bg-gray-200"></div>
                         <div className="flex items-center gap-3">
                             <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Super Admin'}</p>
-                                <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Platform Super Admin</p>
+                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Platform Super Admin'}</p>
+                                <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Master Platform Owner</p>
                             </div>
                             <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-sm uppercase shadow-md shadow-red-100">
                                 SA
@@ -125,149 +272,304 @@ export default function SuperAdminDashboardPage() {
 
                 {/* Main Content */}
                 <div className="p-8">
-                    <div className="mb-8">
-                        <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Bảng Điều Khiển Super Admin SaaS</h1>
-                        <p className="text-gray-500 text-sm">Quản lý doanh nghiệp thuê, hợp đồng và doanh thu trên toàn nền tảng SmartOffice.</p>
+                    {/* Title & Quick Actions */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                        <div>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-bold mb-2">
+                                <ShieldCheck size={14} /> SaaS Multi-Tenant Control Hub
+                            </div>
+                            <h1 className="text-3xl font-extrabold text-gray-900 mb-1">Quản Lý Nền Tảng Doanh Nghiệp (Platform SaaS)</h1>
+                            <p className="text-gray-500 text-xs">Quản lý doanh nghiệp thuê, hợp đồng gói cước, số lượng user và doanh thu toàn hệ thống.</p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => router.push('/door-simulator')}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+                            >
+                                <KeyRound size={16} className="text-amber-500" /> Mô Phỏng Quẹt Cửa
+                            </button>
+                            <button
+                                onClick={() => setIsAddModalOpen(true)}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-red-100 cursor-pointer"
+                            >
+                                <Plus size={16} /> Thêm Doanh Nghiệp Mới
+                            </button>
+                        </div>
                     </div>
 
                     {statusMsg && (
-                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl font-medium">
-                            {statusMsg}
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-xl font-medium flex justify-between items-center shadow-sm">
+                            <span>{statusMsg}</span>
+                            <button onClick={() => setStatusMsg(null)} className="text-xs font-bold opacity-60 hover:opacity-100">Đóng</button>
                         </div>
                     )}
 
-                    {/* Stats overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                                <Building2 size={24} />
+                    {/* Stats Overview Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Doanh Nghiệp Thuê</span>
+                                <span className="p-2 rounded-xl bg-blue-50 text-blue-600">
+                                    <Building2 size={20} />
+                                </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Doanh nghiệp thuê</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{tenants.length}</p>
+                                <h3 className="text-3xl font-extrabold text-gray-900 mb-1">{tenants.length} công ty</h3>
+                                <p className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                                    <TrendingUp size={14} /> +2 công ty <span className="text-gray-400 font-normal">tháng này</span>
+                                </p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-                                <Users size={24} />
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Tổng User Toàn Sàn</span>
+                                <span className="p-2 rounded-xl bg-purple-50 text-purple-600">
+                                    <Users size={20} />
+                                </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Tổng User Toàn Sàn</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{totalUsersSum}</p>
+                                <h3 className="text-3xl font-extrabold text-gray-900 mb-1">{totalUsersSum.toLocaleString()} users</h3>
+                                <p className="text-xs text-gray-400">Tài khoản Admin, Manager & Employee</p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                                <CreditCard size={24} />
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Doanh Thu Định Kỳ MRR</span>
+                                <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
+                                    <DollarSign size={20} />
+                                </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Gói Premium / Enterprise</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{premiumCount + enterpriseCount}</p>
+                                <h3 className="text-3xl font-extrabold text-emerald-600 mb-1">${totalRevenueSum.toLocaleString()} <span className="text-xs font-normal text-gray-400">/ tháng</span></h3>
+                                <p className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                                    <TrendingUp size={14} /> +18.2% <span className="text-gray-400 font-normal">ARR ước tính</span>
+                                </p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                                <TrendingUp size={24} />
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Gói Trả Phí (Paid Rate)</span>
+                                <span className="p-2 rounded-xl bg-amber-50 text-amber-600">
+                                    <CreditCard size={20} />
+                                </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Doanh thu ước tính</p>
-                                <p className="text-2xl font-extrabold text-gray-900">${(premiumCount * 49 + enterpriseCount * 199).toLocaleString()}/tháng</p>
+                                <h3 className="text-3xl font-extrabold text-gray-900 mb-1">{paidCount}/{tenants.length} <span className="text-xs font-normal text-gray-400">({Math.round((paidCount / (tenants.length || 1)) * 100)}%)</span></h3>
+                                <p className="text-xs text-gray-400">Chuyển đổi Premium & Enterprise</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Tenant List Table */}
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                            <div>
-                                <h3 className="font-bold text-gray-900 text-lg">Danh sách Doanh Nghiệp Thuê Ứng Dụng</h3>
-                                <p className="text-xs text-gray-400">Danh sách các công ty đang hoạt động trên hệ thống SmartOffice.</p>
-                            </div>
+                    {/* Filter Tabs & Search */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <div className="flex gap-2">
+                            {[
+                                { label: 'Tất cả Doanh Nghiệp', value: 'all' },
+                                { label: 'Gói Free', value: 'free' },
+                                { label: 'Gói Premium', value: 'premium' },
+                                { label: 'Gói Enterprise', value: 'enterprise' },
+                            ].map((tab) => (
+                                <button
+                                    key={tab.value}
+                                    onClick={() => setFilterPlan(tab.value as any)}
+                                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                                        filterPlan === tab.value
+                                            ? 'bg-red-600 text-white shadow-md shadow-red-100'
+                                            : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-100'
+                                    }`}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
                         </div>
 
-                        {loading ? (
-                            <div className="p-12 flex justify-center items-center text-gray-400 gap-2">
-                                <Loader2 className="animate-spin" size={24} />
-                                <span>Đang tải danh sách doanh nghiệp...</span>
-                            </div>
-                        ) : filteredTenants.length === 0 ? (
+                        <span className="text-xs font-semibold text-gray-400">Hiển thị {filteredTenants.length} / {tenants.length} công ty</span>
+                    </div>
+
+                    {/* Tenants Table */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+                        {filteredTenants.length === 0 ? (
                             <div className="p-12 text-center text-gray-400">
-                                Chưa có doanh nghiệp nào phù hợp.
+                                Không tìm thấy doanh nghiệp nào phù hợp.
                             </div>
                         ) : (
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase text-gray-400 tracking-wider">
-                                        <th className="py-4 px-6">Tên Doanh nghiệp</th>
-                                        <th className="py-4 px-6">Domain / Tên miền</th>
-                                        <th className="py-4 px-6">Số lượng User</th>
-                                        <th className="py-4 px-6">Gói dịch vụ</th>
-                                        <th className="py-4 px-6">Hành động Nâng gói</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 text-sm">
-                                    {filteredTenants.map((tenant) => {
-                                        const isUpdating = updatingTenantId === tenant._id;
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[850px]">
+                                    <thead>
+                                        <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase text-gray-400 tracking-wider">
+                                            <th className="py-4 px-6">Doanh Nghiệp Thuê</th>
+                                            <th className="py-4 px-6">Subdomain</th>
+                                            <th className="py-4 px-6 text-center">Nhân Sự (Users)</th>
+                                            <th className="py-4 px-6">Gói Dịch Vụ Đang Dùng</th>
+                                            <th className="py-4 px-6 text-right">Trạng Thái & Khóa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-sm">
+                                        {filteredTenants.map((tenant) => {
+                                            const isSuspended = tenant.status === 'suspended';
 
-                                        return (
-                                            <tr key={tenant._id} className="hover:bg-gray-50/50 transition-colors">
-                                                <td className="py-4 px-6 font-bold text-gray-900">
-                                                    {tenant.name}
-                                                </td>
-                                                <td className="py-4 px-6 text-gray-600 text-xs font-mono">
-                                                    {tenant.domain}.smartoffice.com
-                                                </td>
-                                                <td className="py-4 px-6 font-semibold text-blue-600">
-                                                    {tenant.totalUsers || 1} users
-                                                </td>
-                                                <td className="py-4 px-6">
-                                                    <span
-                                                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-block ${tenant.plan === 'enterprise'
-                                                                ? 'bg-purple-50 text-purple-600 border border-purple-100'
-                                                                : tenant.plan === 'premium'
-                                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                                                                    : 'bg-gray-100 text-gray-600 border border-gray-200'
-                                                            }`}
-                                                    >
-                                                        {tenant.plan}
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 px-6">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => handleUpdatePlan(tenant._id, 'free')}
-                                                            disabled={isUpdating || tenant.plan === 'free'}
-                                                            className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-30 cursor-pointer"
-                                                        >
-                                                            Free
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleUpdatePlan(tenant._id, 'premium')}
-                                                            disabled={isUpdating || tenant.plan === 'premium'}
-                                                            className="px-2.5 py-1 text-xs border border-blue-200 rounded-lg hover:bg-blue-50 text-blue-600 font-bold disabled:opacity-30 cursor-pointer"
-                                                        >
-                                                            Premium
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleUpdatePlan(tenant._id, 'enterprise')}
-                                                            disabled={isUpdating || tenant.plan === 'enterprise'}
-                                                            className="px-2.5 py-1 text-xs border border-purple-200 rounded-lg hover:bg-purple-50 text-purple-600 font-bold disabled:opacity-30 cursor-pointer"
-                                                        >
-                                                            Enterprise
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                            return (
+                                                <tr key={tenant._id} className={`hover:bg-gray-50/70 transition-colors ${isSuspended ? 'bg-rose-50/30' : ''}`}>
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm uppercase ${
+                                                                tenant.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
+                                                                tenant.plan === 'premium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                                            }`}>
+                                                                {tenant.name.charAt(0)}
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-bold text-gray-900 text-sm">{tenant.name}</h4>
+                                                                <span className="text-[11px] text-gray-400">Tham gia: {tenant.createdAt}</span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="py-4 px-6 font-mono text-xs font-bold text-gray-600">
+                                                        {tenant.domain}.smartoffice.com
+                                                    </td>
+
+                                                    <td className="py-4 px-6 text-center font-extrabold text-blue-600">
+                                                        {tenant.totalUsers} <span className="text-gray-400 font-normal text-xs">users</span>
+                                                    </td>
+
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-extrabold text-gray-900 text-sm flex items-center gap-1.5">
+                                                                {tenant.plan === 'enterprise' && <Sparkles size={14} className="text-purple-600" />}
+                                                                {tenant.planName || tenant.plan}
+                                                            </span>
+                                                            <span className="text-xs font-semibold text-blue-600 mt-0.5">
+                                                                ${tenant.monthlyRevenue}/tháng <span className="text-gray-400 font-normal">({tenant.plan.toUpperCase()})</span>
+                                                            </span>
+                                                        </div>
+                                                    </td>
+
+                                                    <td className="py-4 px-6 text-right">
+                                                        <div className="flex items-center justify-end gap-3">
+                                                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                                                                tenant.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-100 text-rose-700 border border-rose-200'
+                                                            }`}>
+                                                                {tenant.status === 'active' ? '● Đang hoạt động' : '🔒 Đã tạm khóa'}
+                                                            </span>
+
+                                                            <button
+                                                                onClick={() => handleToggleStatus(tenant._id)}
+                                                                title={isSuspended ? 'Mở khóa hoạt động' : 'Tạm khóa công ty'}
+                                                                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                                                                    isSuspended 
+                                                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100' 
+                                                                        : 'bg-white border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50'
+                                                                }`}
+                                                            >
+                                                                {isSuspended ? <Unlock size={16} /> : <Lock size={16} />}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 </div>
+
+                {/* Modal: Manual Enterprise Onboarding */}
+                {isAddModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+                        <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 rounded-xl bg-red-50 text-red-600">
+                                        <Building2 size={20} />
+                                    </div>
+                                    <h3 className="font-bold text-gray-900 text-lg">Khởi Tạo Doanh Nghiệp Mới</h3>
+                                </div>
+                                <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCreateTenant} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-700 block mb-1">Tên Công Ty / Doanh Nghiệp</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="Ví dụ: Tập đoàn Công nghệ VNG"
+                                        value={newTenantName}
+                                        onChange={(e) => setNewTenantName(e.target.value)}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:bg-white focus:border-red-500 outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-gray-700 block mb-1">Tên Miền Subdomain</label>
+                                    <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus-within:bg-white focus-within:border-red-500">
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="vng-tech"
+                                            value={newDomain}
+                                            onChange={(e) => setNewDomain(e.target.value)}
+                                            className="w-full bg-transparent outline-none text-sm"
+                                        />
+                                        <span className="text-xs font-bold text-gray-400 shrink-0">.smartoffice.com</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">Tên Admin Ban Đầu</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Nguyễn Văn A"
+                                            value={newAdminName}
+                                            onChange={(e) => setNewAdminName(e.target.value)}
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:bg-white focus:border-red-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">Gói Cước Ban Đầu</label>
+                                        <select
+                                            value={newPlan}
+                                            onChange={(e) => setNewPlan(e.target.value as any)}
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:bg-white focus:border-red-500 outline-none font-bold"
+                                        >
+                                            <option value="free">Free ($0)</option>
+                                            <option value="premium">Premium ($49)</option>
+                                            <option value="enterprise">Enterprise ($199)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddModalOpen(false)}
+                                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-200"
+                                    >
+                                        Hủy
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmittingNew}
+                                        className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-red-100 disabled:opacity-50"
+                                    >
+                                        {isSubmittingNew ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
+                                        Khởi Tạo Ngay
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

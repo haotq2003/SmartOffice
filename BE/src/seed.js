@@ -37,7 +37,8 @@ const seedDB = async () => {
       name: 'Super Admin System',
       email: 'superadmin@smartoffice.com',
       password: defaultPassword,
-      role: 'super_admin'
+      role: 'super_admin',
+      rfidCardId: 'RFID-1001'
     });
 
     const admin = await User.create({
@@ -45,7 +46,8 @@ const seedDB = async () => {
       name: 'Tenant Admin',
       email: 'admin@smartoffice.com',
       password: defaultPassword,
-      role: 'admin'
+      role: 'admin',
+      rfidCardId: 'RFID-1002'
     });
 
     const manager = await User.create({
@@ -53,7 +55,8 @@ const seedDB = async () => {
       name: 'Nguyễn Văn Manager',
       email: 'manager@smartoffice.com',
       password: defaultPassword,
-      role: 'manager'
+      role: 'manager',
+      rfidCardId: 'RFID-1003'
     });
 
     const employee = await User.create({
@@ -61,7 +64,8 @@ const seedDB = async () => {
       name: 'Trần Văn Employee',
       email: 'employee@smartoffice.com',
       password: defaultPassword,
-      role: 'employee'
+      role: 'employee',
+      rfidCardId: 'RFID-1004'
     });
 
     console.log('Creating 6 Fixed Meeting Rooms (Auto-approve = TRUE)...');

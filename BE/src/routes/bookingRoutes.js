@@ -99,7 +99,7 @@ router.get('/bookings/my-bookings', verifyToken, getMyBookings);
  *       500:
  *         description: Server error
  */
-router.get('/bookings/all', verifyToken, authorizeRoles('manager'), getAllBookings);
+router.get('/bookings/all', verifyToken, authorizeRoles('manager', 'admin', 'super_admin'), getAllBookings);
 
 /**
  * @swagger
@@ -138,7 +138,7 @@ router.get('/bookings/all', verifyToken, authorizeRoles('manager'), getAllBookin
  *       500:
  *         description: Server error
  */
-router.patch('/bookings/:id/status', verifyToken, authorizeRoles('manager'), updateBookingStatus);
+router.patch('/bookings/:id/status', verifyToken, updateBookingStatus);
 
 /**
  * @swagger

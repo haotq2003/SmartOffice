@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
-import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Package, LogOut } from 'lucide-react';
+import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Package, LogOut, AlertTriangle } from 'lucide-react';
 import { bookingService } from '../../services/bookingService';
 import { Booking } from '../../types/api';
 import { UserInfo } from '../../store/authSlice';
@@ -14,8 +14,13 @@ export default function MyBookingsPage() {
     const [user, setUser] = useState<UserInfo | null>(null);
     const [myBookings, setMyBookings] = useState<Booking[]>([]);
     const [loadingBookings, setLoadingBookings] = useState(true);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [historyFilter, setHistoryFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+
+    // Custom Modal & Toast States
+    const [selectedCancelBooking, setSelectedCancelBooking] = useState<Booking | null>(null);
+    const [statusToast, setStatusToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -43,6 +48,29 @@ export default function MyBookingsPage() {
         }
     };
 
+    const confirmCancelBooking = async () => {
+        if (!selectedCancelBooking) return;
+        const bookingId = selectedCancelBooking._id;
+        setCancellingId(bookingId);
+        setStatusToast(null);
+        try {
+            const res = await bookingService.updateBookingStatus(bookingId, 'cancelled');
+            if (res.success) {
+                setStatusToast({ type: 'success', message: 'Hủy đơn đặt lịch thành công!' });
+                setSelectedCancelBooking(null);
+                fetchMyBookings();
+            }
+        } catch (err: any) {
+            console.error(err);
+            setStatusToast({
+                type: 'error',
+                message: err.response?.data?.message || 'Không thể hủy đơn đặt lịch. Vui lòng thử lại.'
+            });
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -50,15 +78,18 @@ export default function MyBookingsPage() {
     };
 
     const pendingCount = myBookings.filter(b => b.status === 'pending').length;
-    const approvedCount = myBookings.filter(b => b.status === 'approved').length;
-    const rejectedCount = myBookings.filter(b => b.status === 'rejected').length;
+    const approvedCount = myBookings.filter(b => b.status === 'approved' || b.status === 'checked_in' || b.status === 'confirmed').length;
+    const rejectedCount = myBookings.filter(b => b.status === 'rejected' || b.status === 'no_show' || b.status === 'cancelled').length;
 
     const filteredBookings = myBookings.filter((b) => {
         const resourceObj = typeof b.resourceId === 'object' ? b.resourceId : null;
         const resourceName = resourceObj?.name || '';
         const matchesSearch = resourceName.toLowerCase().includes(searchQuery.toLowerCase()) || 
                               (b.notes && b.notes.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesStatus = historyFilter === 'all' || b.status === historyFilter;
+        const matchesStatus = historyFilter === 'all' || 
+            b.status === historyFilter || 
+            (historyFilter === 'approved' && (b.status === 'checked_in' || b.status === 'confirmed')) ||
+            (historyFilter === 'rejected' && (b.status === 'no_show' || b.status === 'cancelled'));
         return matchesSearch && matchesStatus;
     });
 
@@ -113,6 +144,19 @@ export default function MyBookingsPage() {
                         </div>
                     </div>
 
+                    {/* Notification Toast / Status Alert Banner */}
+                    {statusToast && (
+                        <div className={`mb-6 p-4 rounded-2xl border text-sm font-medium flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 ${
+                            statusToast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'
+                        }`}>
+                            <div className="flex items-center gap-2">
+                                {statusToast.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <AlertTriangle size={18} className="text-red-600" />}
+                                <span>{statusToast.message}</span>
+                            </div>
+                            <button onClick={() => setStatusToast(null)} className="text-xs opacity-60 hover:opacity-100 font-bold">Làm mới</button>
+                        </div>
+                    )}
+
                     {/* Filter Pills (Manager Style) */}
                     <div className="flex gap-2 mb-6 flex-wrap">
                         {[
@@ -155,6 +199,7 @@ export default function MyBookingsPage() {
                                         <th className="py-4 px-6">Thời gian kết thúc</th>
                                         <th className="py-4 px-6">Ghi chú</th>
                                         <th className="py-4 px-6">Trạng thái</th>
+                                        <th className="py-4 px-6 text-right">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 text-sm">
@@ -169,28 +214,56 @@ export default function MyBookingsPage() {
                                                     </div>
                                                 </td>
                                                 <td className="py-4 px-6 text-gray-600 text-xs">
-                                                    {new Date(b.startTime).toLocaleString('vi-VN')}
+                                                    {resourceObj?.type === 'equipment' ? new Date(b.startTime).toLocaleDateString('vi-VN') : new Date(b.startTime).toLocaleString('vi-VN')}
                                                 </td>
                                                 <td className="py-4 px-6 text-gray-600 text-xs">
-                                                    {new Date(b.endTime).toLocaleString('vi-VN')}
+                                                    {resourceObj?.type === 'equipment' ? new Date(b.endTime).toLocaleDateString('vi-VN') : new Date(b.endTime).toLocaleString('vi-VN')}
                                                 </td>
                                                 <td className="py-4 px-6 text-gray-500 text-xs max-w-xs truncate">
                                                     {b.notes || '—'}
                                                 </td>
                                                 <td className="py-4 px-6">
                                                     <span
-                                                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5 ${b.status === 'approved'
-                                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                                : b.status === 'rejected'
-                                                                    ? 'bg-red-50 text-red-600 border border-red-100'
-                                                                    : 'bg-amber-50 text-amber-600 border border-amber-100'
+                                                         className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5 ${
+                                                             ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime))
+                                                                 ? 'bg-rose-100 text-rose-700 border border-rose-200 animate-pulse'
+                                                                 : b.status === 'approved' || b.status === 'confirmed'
+                                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                                     : b.status === 'checked_in'
+                                                                         ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                                         : b.status === 'no_show'
+                                                                        ? 'bg-purple-50 text-purple-600 border border-purple-100'
+                                                                        : b.status === 'rejected'
+                                                                            ? 'bg-red-50 text-red-600 border border-red-100'
+                                                                            : b.status === 'cancelled'
+                                                                                ? 'bg-gray-50 text-gray-600 border border-gray-100'
+                                                                                : 'bg-amber-50 text-amber-600 border border-amber-100'
                                                             }`}
                                                     >
-                                                        {b.status === 'approved' && <CheckCircle2 size={14} />}
-                                                        {b.status === 'rejected' && <XCircle size={14} />}
+                                                        {(b.status === 'approved' || b.status === 'confirmed' || b.status === 'checked_in') && <CheckCircle2 size={14} />}
+                                                        {(b.status === 'rejected' || b.status === 'no_show' || b.status === 'cancelled') && <XCircle size={14} />}
                                                         {b.status === 'pending' && <AlertCircle size={14} />}
-                                                        {b.status === 'approved' ? 'Đã duyệt' : b.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt'}
+                                                        {
+                                                            ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime)) ? '⚠️ Quá hạn trả' :
+                                                            b.status === 'approved' ? 'Đã duyệt' :
+                                                            b.status === 'checked_in' ? 'Đã giao thiết bị' :
+                                                            b.status === 'no_show' ? 'Báo không lấy' :
+                                                            b.status === 'rejected' ? 'Từ chối' :
+                                                            b.status === 'confirmed' ? 'Xác nhận' :
+                                                            b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
+                                                        }
                                                     </span>
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    {(b.status === 'pending' || b.status === 'approved') && (
+                                                        <button
+                                                            onClick={() => setSelectedCancelBooking(b)}
+                                                            className="px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                                                        >
+                                                            <XCircle size={14} />
+                                                            Hủy đơn
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -201,6 +274,52 @@ export default function MyBookingsPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Custom Confirmation Modal */}
+            {selectedCancelBooking && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+                        <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4 border border-red-100 shadow-inner">
+                            <AlertTriangle size={28} />
+                        </div>
+
+                        <h3 className="text-xl font-extrabold text-gray-900 mb-2">
+                            Xác nhận Hủy Đơn Đặt Lịch
+                        </h3>
+
+                        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                            Bạn có chắc chắn muốn hủy đơn đặt lịch cho <span className="font-bold text-gray-900">"{typeof selectedCancelBooking.resourceId === 'object' ? selectedCancelBooking.resourceId?.name : 'Tài nguyên'}"</span> không? Thao tác này không thể hoàn tác.
+                        </p>
+
+                        <div className="flex items-center gap-3 w-full">
+                            <button
+                                onClick={() => setSelectedCancelBooking(null)}
+                                disabled={cancellingId === selectedCancelBooking._id}
+                                className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                Quay lại
+                            </button>
+                            <button
+                                onClick={confirmCancelBooking}
+                                disabled={cancellingId === selectedCancelBooking._id}
+                                className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-red-200 disabled:opacity-50"
+                            >
+                                {cancellingId === selectedCancelBooking._id ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={16} />
+                                        <span>Đang hủy...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <XCircle size={16} />
+                                        <span>Xác nhận Hủy</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

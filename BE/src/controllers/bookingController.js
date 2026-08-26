@@ -7,7 +7,7 @@ const { sendEmail, generateMeetingInviteHtml } = require('../services/emailServi
 
 const createBooking = async (req, res) => {
   try {
-    const { resourceId, startTime, endTime, notes, attendees } = req.body;
+    const { resourceId, startTime, endTime, notes, attendees, quantity } = req.body;
 
     if (!resourceId || !startTime || !endTime) {
       return res.status(400).json({
@@ -61,23 +61,25 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Working hours validation: 08:00 - 17:30 local time
-    const startHour = start.getHours();
-    const startMin = start.getMinutes();
-    const endHour = end.getHours();
-    const endMin = end.getMinutes();
+    // Working hours validation: 08:00 - 17:30 local time (Only for rooms / vehicles)
+    if (resource.type !== 'equipment') {
+      const startHour = start.getHours();
+      const startMin = start.getMinutes();
+      const endHour = end.getHours();
+      const endMin = end.getMinutes();
 
-    const startTotalMinutes = startHour * 60 + startMin;
-    const endTotalMinutes = endHour * 60 + endMin;
+      const startTotalMinutes = startHour * 60 + startMin;
+      const endTotalMinutes = endHour * 60 + endMin;
 
-    const workStart = 8 * 60; // 08:00
-    const workEnd = 17 * 60 + 30; // 17:30
+      const workStart = 8 * 60; // 08:00
+      const workEnd = 17 * 60 + 30; // 17:30
 
-    if (startTotalMinutes < workStart || endTotalMinutes > workEnd) {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking time must be within working hours (08:00 - 17:30).'
-      });
+      if (startTotalMinutes < workStart || endTotalMinutes > workEnd) {
+        return res.status(400).json({
+          success: false,
+          message: 'Booking time must be within working hours (08:00 - 17:30).'
+        });
+      }
     }
 
     // Process attendees list
@@ -94,12 +96,13 @@ const createBooking = async (req, res) => {
     // Call service to check overlap and create booking
     const booking = await bookingService.createBooking({
       tenantId: req.user.tenantId,
-      userId: req.user.userId,
+      userId: req.user.userId || req.user._id,
       resourceId,
       startTime: start,
       endTime: end,
       notes,
       attendees: attendeesList,
+      quantity: Number(quantity) || 1,
       status: initialStatus
     });
 
@@ -272,18 +275,101 @@ const updateBookingStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!['approved', 'rejected', 'pending'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid status.' });
+    const allowedStatuses = ['approved', 'rejected', 'pending', 'checked_in', 'returned', 'cancelled', 'no_show'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Trạng thái cập nhật không hợp lệ.' });
+    }
+
+    const existingBooking = await Booking.findOne({ _id: id, tenantId: req.user.tenantId });
+    if (!existingBooking) {
+      return res.status(404).json({ success: false, message: 'Booking request not found.' });
+    }
+
+    // Permission check: Employees can only cancel their own bookings
+    const currentUserId = (req.user.userId || req.user._id || req.user.id)?.toString();
+    const bookingUserId = (existingBooking.userId?._id || existingBooking.userId)?.toString();
+    const isOwner = Boolean(bookingUserId && currentUserId && bookingUserId === currentUserId);
+    const isManagerOrAdmin = ['manager', 'admin', 'super_admin'].includes(req.user.role);
+
+    if (!isManagerOrAdmin) {
+      if (!isOwner || status !== 'cancelled') {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền thực hiện thao tác này.' });
+      }
+    }
+
+    const previousStatus = existingBooking.status;
+
+    // Validate warehouse stock before handing over equipment
+    if (status === 'checked_in' && previousStatus !== 'checked_in') {
+      const qtyToDeduct = existingBooking.quantity || 1;
+      const targetResource = await Resource.findById(existingBooking.resourceId);
+      if (!targetResource || (targetResource.quantity || 0) < qtyToDeduct) {
+        return res.status(400).json({
+          success: false,
+          message: `Số lượng thiết bị trong kho không đủ để giao (Hiện còn ${targetResource?.quantity || 0} cái, cần giao ${qtyToDeduct} cái).`
+        });
+      }
+    }
+
+    const updateData = { status };
+    if (status === 'checked_in') {
+      updateData.checkedInAt = new Date();
     }
 
     const booking = await Booking.findOneAndUpdate(
       { _id: id, tenantId: req.user.tenantId },
-      { status },
+      updateData,
       { new: true }
-    ).populate('userId', 'name email').populate('resourceId', 'name type location');
+    ).populate('userId', 'name email violationCount bookingBannedUntil').populate('resourceId', 'name type location');
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking request not found.' });
+    }
+
+    // Deduct quantity from Resource when handed over (checked_in)
+    if (status === 'checked_in' && previousStatus !== 'checked_in') {
+      const qtyToDeduct = booking.quantity || 1;
+      await Resource.findByIdAndUpdate(booking.resourceId?._id || booking.resourceId, {
+        $inc: { quantity: -qtyToDeduct }
+      });
+    }
+    // Restore quantity to Resource when device is returned or booking reverted/cancelled from checked_in
+    else if (previousStatus === 'checked_in' && status !== 'checked_in') {
+      const qtyToRestore = booking.quantity || 1;
+      await Resource.findByIdAndUpdate(booking.resourceId?._id || booking.resourceId, {
+        $inc: { quantity: qtyToRestore }
+      });
+    }
+
+    // Handle no_show violation penalty
+    if (status === 'no_show' && booking.userId) {
+      const user = await User.findById(booking.userId._id);
+      if (user) {
+        user.violationCount = (user.violationCount || 0) + 1;
+        if (user.violationCount >= 2) {
+          user.bookingBannedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days penalty
+        }
+        await user.save();
+
+        createAndSendNotification({
+          tenantId: req.user.tenantId,
+          userId: user._id,
+          title: `⚠️ Vi phạm không nhận thiết bị / không check-in: ${booking.resourceId?.name || 'Tài nguyên'}`,
+          message: `Hệ thống đánh dấu bạn đã không đến nhận thiết bị/check-in đúng hạn. Bạn đã vi phạm ${user.violationCount} lần.${user.violationCount >= 2 ? ` Tài khoản bị tạm cấm đặt tài nguyên trong 7 ngày.` : ''}`,
+          type: 'booking_rejected',
+          referenceId: booking._id,
+          emailData: {
+            recipientEmail: user.email,
+            recipientName: user.name,
+            resourceName: booking.resourceId?.name || 'Tài nguyên',
+            location: booking.resourceId?.location || 'Phòng thiết bị',
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            status: 'no_show',
+            notes: `Cảnh báo vi phạm lần thứ ${user.violationCount}`
+          }
+        });
+      }
     }
 
     // 1. Trigger notification & email to the booking creator (Employee)

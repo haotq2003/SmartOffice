@@ -11,9 +11,9 @@ import {
     Building2,
     CreditCard,
     DollarSign,
-    CalendarPlus,
     Calendar,
-    Shield
+    Shield,
+    KeyRound
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -38,32 +38,32 @@ export default function Sidebar({ activeTab }: SidebarProps) {
 
     // 1. Super Admin Menu (Platform Level)
     const superAdminMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Platform Dashboard', path: '/dashboard' },
-        { id: 'tenants', icon: Building2, label: 'Doanh nghiệp thuê', path: '/dashboard' },
-        { id: 'plans', icon: CreditCard, label: 'Quản lý Gói cước', path: '/dashboard' },
-        { id: 'revenue', icon: DollarSign, label: 'Doanh thu Platform', path: '/dashboard' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard Platform', path: '/dashboard' },
+        { id: 'tenants', icon: Building2, label: 'Doanh Nghiệp Thuê', path: '/dashboard' },
+        { id: 'plans', icon: CreditCard, label: 'Quản Lý Gói Cước', path: '/dashboard/plans' },
+        { id: 'revenue', icon: DollarSign, label: 'Doanh Thu Platform', path: '/dashboard' },
+        { id: 'door-simulator', icon: KeyRound, label: 'Mô Phỏng Quẹt Cửa', path: '/door-simulator' },
     ];
 
     // 2. Tenant Admin Menu (Enterprise Level)
     const adminMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Tổng quan Doanh nghiệp', path: '/dashboard' },
-        { id: 'managers-user', icon: User2, label: 'Quản lý nhân sự', path: '/dashboard/users' },
-        { id: 'resources', icon: Package, label: 'Cơ sở vật chất', path: '/dashboard/resources' },
-        { id: 'analytics', icon: BarChart3, label: 'Báo cáo doanh nghiệp', path: '/dashboard' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Tổng Quan Doanh Nghiệp', path: '/dashboard' },
+        { id: 'managers-user', icon: User2, label: 'Quản Lý Nhân Sự', path: '/dashboard/users' },
+        { id: 'resources', icon: Package, label: 'Cơ Sở Vật Chất', path: '/dashboard/resources' },
+        { id: 'door-simulator', icon: KeyRound, label: 'Mô Phỏng Quẹt Cửa', path: '/door-simulator' },
+        { id: 'analytics', icon: BarChart3, label: 'Báo Cáo Doanh Nghiệp', path: '/dashboard/analytics' },
     ];
 
     // 3. Manager Menu (Department Level)
     const managerMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Tổng quan Quản lý', path: '/dashboard' },
-        { id: 'approvals', icon: CheckSquare, label: 'Cổng Phê duyệt Đơn', path: '/dashboard' },
-        { id: 'resources', icon: Package, label: 'Quản lý Cơ sở vật chất', path: '/dashboard/resources' },
-        { id: 'analytics', icon: BarChart3, label: 'Thống kê phòng ban', path: '/dashboard' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Phê Duyệt Đơn', path: '/dashboard' },
+        
     ];
 
     // 4. Employee Menu (Individual Level)
     const employeeMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Đặt phòng & Thiết bị', path: '/dashboard' },
-        { id: 'my-bookings', icon: Calendar, label: 'Lịch sử', path: '/dashboard/my-bookings' },
+        { id: 'dashboard', icon: LayoutDashboard, label: 'Đặt Phòng & Thiết Bị', path: '/dashboard' },
+        { id: 'my-bookings', icon: Calendar, label: 'Lịch Sử Đặt Lịch', path: '/dashboard/my-bookings' },
     ];
 
     // Select specific menu for active role
@@ -87,20 +87,20 @@ export default function Sidebar({ activeTab }: SidebarProps) {
     };
 
     return (
-        <div className="w-64 bg-white h-screen flex flex-col border-r border-gray-100 sticky top-0 font-sans">
+        <aside className="w-64 shrink-0 bg-white h-screen flex flex-col border-r border-gray-100 sticky top-0 font-sans select-none">
             {/* Brand Header */}
             <div className="p-6 flex items-center justify-between border-b border-gray-50 cursor-pointer" onClick={() => router.push('/dashboard')}>
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md shadow-blue-100">
                         <div className="w-4 h-4 border-2 border-white rounded-sm"></div>
                     </div>
-                    <span className="text-xl font-bold text-gray-900 tracking-tight">SmartOffice</span>
+                    <span className="text-xl font-bold text-gray-900 tracking-tight whitespace-nowrap">SmartOffice</span>
                 </div>
             </div>
 
             {/* Role indicator badge */}
             <div className="px-6 pt-4 pb-2">
-                <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-md border block text-center ${currentRoleConfig.badgeBg}`}>
+                <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-md border block text-center whitespace-nowrap overflow-hidden truncate ${currentRoleConfig.badgeBg}`}>
                     {currentRoleConfig.title}
                 </span>
             </div>
@@ -111,24 +111,24 @@ export default function Sidebar({ activeTab }: SidebarProps) {
                     <button
                         key={item.id}
                         onClick={() => handleNavigation(item.path)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${activeTab === item.id
-                                ? 'bg-blue-50 text-blue-700 font-bold shadow-sm'
+                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-left whitespace-nowrap overflow-hidden ${activeTab === item.id
+                                ? 'bg-blue-50 text-blue-700 shadow-sm'
                                 : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                             }`}
                     >
-                        <item.icon size={20} />
-                        {item.label}
+                        <item.icon size={18} className="shrink-0" />
+                        <span className="truncate">{item.label}</span>
                     </button>
                 ))}
             </nav>
 
             {/* Role specific Footer info */}
             <div className="p-6 border-t border-gray-100 bg-gray-50/50">
-                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium">
-                    <Shield size={14} />
+                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium whitespace-nowrap">
+                    <Shield size={14} className="shrink-0" />
                     <span>Multi-Tenant Mode</span>
                 </div>
             </div>
-        </div>
+        </aside>
     );
 }

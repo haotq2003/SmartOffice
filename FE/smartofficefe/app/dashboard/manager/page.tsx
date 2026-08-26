@@ -45,13 +45,19 @@ export default function ManagerDashboardPage() {
         }
     };
 
-    const handleUpdateStatus = async (bookingId: string, status: 'approved' | 'rejected') => {
+    const handleUpdateStatus = async (bookingId: string, status: 'approved' | 'rejected' | 'pending' | 'checked_in' | 'returned' | 'no_show') => {
         setActionLoadingId(bookingId);
         setStatusMsg(null);
         try {
             const res = await bookingService.updateBookingStatus(bookingId, status);
             if (res.success) {
-                setStatusMsg(`Đã ${status === 'approved' ? 'chấp nhận' : 'từ chối'} đơn đặt lịch thành công!`);
+                const actionLabel = 
+                    status === 'approved' ? 'chấp nhận' :
+                    status === 'rejected' ? 'từ chối' :
+                    status === 'checked_in' ? 'xác nhận giao thiết bị' :
+                    status === 'returned' ? 'xác nhận đã nhận lại thiết bị' :
+                    status === 'no_show' ? 'báo không nhận' : 'cập nhật';
+                setStatusMsg(`Đã ${actionLabel} đơn đặt lịch thành công!`);
                 fetchBookings();
             }
         } catch (err: any) {
@@ -76,13 +82,16 @@ export default function ManagerDashboardPage() {
         const resourceName = resourceObj?.name || '';
 
         const matchesSearch = userName.toLowerCase().includes(searchQuery.toLowerCase()) || resourceName.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesTab = activeTab === 'all' || b.status === activeTab;
+        const matchesTab = activeTab === 'all' || 
+            b.status === activeTab || 
+            (activeTab === 'approved' && b.status === 'checked_in') || 
+            (activeTab === 'rejected' && b.status === 'no_show');
         return matchesSearch && matchesTab;
     });
 
     const pendingCount = bookings.filter(b => b.status === 'pending').length;
-    const approvedCount = bookings.filter(b => b.status === 'approved').length;
-    const rejectedCount = bookings.filter(b => b.status === 'rejected').length;
+    const approvedCount = bookings.filter(b => b.status === 'approved' || b.status === 'checked_in').length;
+    const rejectedCount = bookings.filter(b => b.status === 'rejected' || b.status === 'no_show').length;
 
     return (
         <div className="flex bg-gray-50 min-h-screen font-sans">
@@ -129,51 +138,52 @@ export default function ManagerDashboardPage() {
                 {/* Content */}
                 <div className="p-8">
                     {/* Title */}
-                    {/* <div className="mb-8">
-                        <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Cổng Phê Duyệt Manager</h1>
-                        <p className="text-gray-500 text-sm">Xem xét và phê duyệt các đơn xin mượn tài nguyên văn phòng từ nhân viên.</p>
-                    </div> */}
+                    <div className="mb-6">
+                        <h1 className="text-3xl font-extrabold text-gray-900 mb-1">Cổng Phê Duyệt Manager</h1>
+                        <p className="text-gray-500 text-xs">Xem xét phê duyệt các đơn xin mượn tài nguyên văn phòng và thực hiện bàn giao thiết bị.</p>
+                    </div>
 
-                    {/* {statusMsg && (
-                        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-xl font-medium">
-                            {statusMsg}
+                    {statusMsg && (
+                        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl font-medium flex justify-between items-center shadow-sm">
+                            <span>{statusMsg}</span>
+                            <button onClick={() => setStatusMsg(null)} className="text-xs font-bold opacity-60 hover:opacity-100">Đóng</button>
                         </div>
-                    )} */}
+                    )}
 
                     {/* Stats */}
-                    {/* <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
                                 <Clock size={24} />
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Chờ phê duyệt</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{pendingCount}</p>
+                                <p className="text-2xl font-extrabold text-amber-600">{pendingCount}</p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                                 <CheckCircle2 size={24} />
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Đã chấp nhận</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{approvedCount}</p>
+                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Đã duyệt / Đã giao</p>
+                                <p className="text-2xl font-extrabold text-emerald-600">{approvedCount}</p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+                            <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center border border-red-100">
                                 <XCircle size={24} />
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Đã từ chối</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{rejectedCount}</p>
+                                <p className="text-2xl font-extrabold text-red-600">{rejectedCount}</p>
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
                                 <Calendar size={24} />
                             </div>
                             <div>
@@ -181,7 +191,7 @@ export default function ManagerDashboardPage() {
                                 <p className="text-2xl font-extrabold text-gray-900">{bookings.length}</p>
                             </div>
                         </div>
-                    </div> */}
+                    </div>
 
                     {/* Filter Tabs */}
                     <div className="flex gap-2 mb-6">
@@ -231,9 +241,31 @@ export default function ManagerDashboardPage() {
                                                 <div className="flex items-center gap-3 mb-1">
                                                     <h3 className="font-bold text-gray-900 text-base">{userObj?.name || 'Nhân viên'}</h3>
                                                     <span className="text-xs text-gray-400">({userObj?.email})</span>
-                                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${req.status === 'approved' ? 'bg-emerald-50 text-emerald-600' : req.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
-                                                        {req.status === 'approved' ? 'Đã duyệt' : req.status === 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'}
-                                                    </span>
+                                                    {(() => {
+                                                        const isOverdue = (req.status === 'checked_in' || req.status === 'overdue') && new Date() > new Date(req.endTime);
+                                                        if (isOverdue) {
+                                                            return (
+                                                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200 animate-pulse">
+                                                                    ⚠️ Quá hạn trả
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                                                req.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                                                                req.status === 'checked_in' ? 'bg-blue-50 text-blue-600' :
+                                                                req.status === 'returned' ? 'bg-teal-50 text-teal-600' :
+                                                                req.status === 'no_show' ? 'bg-purple-50 text-purple-600' :
+                                                                req.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                                                            }`}>
+                                                                {req.status === 'approved' ? 'Đã duyệt' :
+                                                                 req.status === 'checked_in' ? 'Đã giao thiết bị' :
+                                                                 req.status === 'returned' ? 'Đã trả thiết bị' :
+                                                                 req.status === 'no_show' ? 'Báo không lấy' :
+                                                                 req.status === 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
 
                                                 <p className="text-sm font-semibold text-blue-600 mb-1">
@@ -241,7 +273,7 @@ export default function ManagerDashboardPage() {
                                                 </p>
 
                                                 <p className="text-xs text-gray-500 mb-2">
-                                                    ⏰ Thời gian: <span className="font-medium text-gray-700">{new Date(req.startTime).toLocaleString('vi-VN')}</span> đến <span className="font-medium text-gray-700">{new Date(req.endTime).toLocaleString('vi-VN')}</span>
+                                                    ⏰ {resourceObj?.type === 'equipment' ? 'Ngày mượn - trả' : 'Thời gian'}: <span className="font-medium text-gray-700">{resourceObj?.type === 'equipment' ? new Date(req.startTime).toLocaleDateString('vi-VN') : new Date(req.startTime).toLocaleString('vi-VN')}</span> đến <span className="font-medium text-gray-700">{resourceObj?.type === 'equipment' ? new Date(req.endTime).toLocaleDateString('vi-VN') : new Date(req.endTime).toLocaleString('vi-VN')}</span>
                                                 </p>
 
                                                 {req.notes && (
@@ -269,6 +301,43 @@ export default function ManagerDashboardPage() {
                                                 >
                                                     {isActionLoading ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
                                                     Phê duyệt
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {req.status === 'approved' && resourceObj?.type === 'equipment' && (
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
+                                                <button
+                                                    onClick={() => handleUpdateStatus(req._id, 'checked_in')}
+                                                    disabled={isActionLoading}
+                                                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-sm disabled:opacity-50"
+                                                    title="Xác nhận nhân viên đã tới kho nhận đồ"
+                                                >
+                                                    {isActionLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
+                                                    Đã giao thiết bị
+                                                </button>
+                                                <button
+                                                    onClick={() => handleUpdateStatus(req._id, 'no_show')}
+                                                    disabled={isActionLoading}
+                                                    className="px-3.5 py-2 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                                    title="Báo vi phạm không tới nhận đồ"
+                                                >
+                                                    {isActionLoading ? <Loader2 className="animate-spin" size={14} /> : <XCircle size={14} />}
+                                                    Báo Không Lấy
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {req.status === 'checked_in' && resourceObj?.type === 'equipment' && (
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
+                                                <button
+                                                    onClick={() => handleUpdateStatus(req._id, 'returned')}
+                                                    disabled={isActionLoading}
+                                                    className="px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-sm disabled:opacity-50"
+                                                    title="Xác nhận nhân viên đã trả lại thiết bị về kho"
+                                                >
+                                                    {isActionLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
+                                                    Nhận lại thiết bị
                                                 </button>
                                             </div>
                                         )}

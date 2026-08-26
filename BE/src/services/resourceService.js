@@ -1,4 +1,5 @@
 const Resource = require('../models/Resource');
+const Booking = require('../models/Booking');
 
 /**
  * Create a new resource
@@ -11,12 +12,21 @@ const createResource = async (data) => {
 };
 
 /**
- * Get all resources for a specific tenant
+ * Get all resources for a specific tenant with optional filters
  * @param {String} tenantId - Tenant ID
+ * @param {Object} [filters={}] - Filtering options (type, status, search)
  * @returns {Array} List of resources
  */
-const getAllResources = async (tenantId) => {
-  return await Resource.find({ tenantId });
+const getAllResources = async (tenantId, filters = {}) => {
+  const query = { tenantId };
+
+  if (filters.type) query.type = filters.type;
+  if (filters.status) query.status = filters.status;
+  if (filters.search) {
+    query.name = { $regex: filters.search, $options: 'i' };
+  }
+
+  return await Resource.find(query).sort({ createdAt: -1 });
 };
 
 /**
@@ -45,12 +55,24 @@ const updateResource = async (id, tenantId, updateData) => {
 };
 
 /**
- * Delete a resource
+ * Delete a resource safely (verifies no active bookings exist)
  * @param {String} id - Resource ID
  * @param {String} tenantId - Tenant ID
  * @returns {Object|null} Deleted resource, or null if not found
  */
 const deleteResource = async (id, tenantId) => {
+  const activeBooking = await Booking.findOne({
+    resourceId: id,
+    tenantId,
+    status: { $in: ['pending', 'approved', 'checked_in'] }
+  });
+
+  if (activeBooking) {
+    const error = new Error('Không thể xóa tài nguyên đang có đơn mượn/đặt chưa hoàn thành.');
+    error.statusCode = 400;
+    throw error;
+  }
+
   return await Resource.findOneAndDelete({ _id: id, tenantId });
 };
 

@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema(
       enum: ['super_admin', 'admin', 'manager', 'employee'],
       default: 'employee',
     },
+    rfidCardId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
   },
   { timestamps: true }
 );
