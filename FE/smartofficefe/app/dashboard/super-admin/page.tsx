@@ -42,86 +42,11 @@ interface TenantData {
     createdAt: string;
 }
 
-const MOCK_TENANTS: TenantData[] = [
-    {
-        _id: 'tenant-1',
-        name: 'FPT Software Corporation',
-        domain: 'fpt-software',
-        plan: 'enterprise',
-        planName: 'Gói Tập Đoàn (Enterprise)',
-        status: 'active',
-        totalUsers: 420,
-        totalResources: 45,
-        monthlyRevenue: 199,
-        createdAt: '2026-01-15'
-    },
-    {
-        _id: 'tenant-2',
-        name: 'VinGroup Digital Ecosystem',
-        domain: 'vingroup',
-        plan: 'enterprise',
-        planName: 'Gói Tập Đoàn (Enterprise)',
-        status: 'active',
-        totalUsers: 680,
-        totalResources: 82,
-        monthlyRevenue: 199,
-        createdAt: '2026-02-01'
-    },
-    {
-        _id: 'tenant-3',
-        name: 'Shopee Vietnam Logistics',
-        domain: 'shopee-vn',
-        plan: 'premium',
-        planName: 'Gói Chuyên Nghiệp (Premium)',
-        status: 'active',
-        totalUsers: 145,
-        totalResources: 24,
-        monthlyRevenue: 49,
-        createdAt: '2026-02-10'
-    },
-    {
-        _id: 'tenant-4',
-        name: 'Viettel Telecom & Solutions',
-        domain: 'viettel',
-        plan: 'enterprise',
-        planName: 'Gói Tập Đoàn (Enterprise)',
-        status: 'active',
-        totalUsers: 510,
-        totalResources: 60,
-        monthlyRevenue: 199,
-        createdAt: '2026-02-18'
-    },
-    {
-        _id: 'tenant-5',
-        name: 'MISA Joint Stock Company',
-        domain: 'misa-soft',
-        plan: 'premium',
-        planName: 'Gói Chuyên Nghiệp (Premium)',
-        status: 'active',
-        totalUsers: 85,
-        totalResources: 15,
-        monthlyRevenue: 49,
-        createdAt: '2026-03-02'
-    },
-    {
-        _id: 'tenant-6',
-        name: 'Startup Creative Lab',
-        domain: 'creativelab',
-        plan: 'free',
-        planName: 'Gói Trải Nghiệm (Free)',
-        status: 'suspended',
-        totalUsers: 12,
-        totalResources: 3,
-        monthlyRevenue: 0,
-        createdAt: '2026-03-12'
-    }
-];
-
 export default function SuperAdminDashboardPage() {
     const router = useRouter();
     const [user, setUser] = useState<UserInfo | null>(null);
-    const [tenants, setTenants] = useState<TenantData[]>(MOCK_TENANTS);
-    const [loading, setLoading] = useState(false);
+    const [tenants, setTenants] = useState<TenantData[]>([]);
+    const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterPlan, setFilterPlan] = useState<'all' | 'free' | 'premium' | 'enterprise'>('all');
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -134,6 +59,9 @@ export default function SuperAdminDashboardPage() {
     const [newAdminEmail, setNewAdminEmail] = useState('');
     const [newPlan, setNewPlan] = useState<'free' | 'premium' | 'enterprise'>('premium');
     const [isSubmittingNew, setIsSubmittingNew] = useState(false);
+
+    const [analytics, setAnalytics] = useState<any>(null);
+    const [transactions, setTransactions] = useState<any[]>([]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -148,25 +76,44 @@ export default function SuperAdminDashboardPage() {
     }, []);
 
     const fetchTenants = async () => {
+        setLoading(true);
         try {
-            const res = await apiClient.get('/tenants');
-            if (res.data && res.data.success && Array.isArray(res.data.data) && res.data.data.length > 0) {
-                const merged = res.data.data.map((t: any, idx: number) => ({
+            const [tenantsRes, revenueRes, transRes] = await Promise.all([
+                apiClient.get('/tenants').catch(() => ({ data: { success: false, data: [] } })),
+                apiClient.get('/tenants/analytics/revenue').catch(() => ({ data: { success: false, data: null } })),
+                apiClient.get('/payment/transactions').catch(() => ({ data: { success: false, data: [] } }))
+            ]);
+
+            if (tenantsRes.data && tenantsRes.data.success && Array.isArray(tenantsRes.data.data)) {
+                const merged = tenantsRes.data.data.map((t: any, idx: number) => ({
                     _id: t._id || `api-${idx}`,
                     name: t.name || 'Doanh nghiệp',
                     domain: t.domain || 'domain',
                     plan: t.plan || 'free',
                     planName: t.planDetails?.name || (t.plan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : t.plan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)'),
                     status: t.status || 'active',
-                    totalUsers: t.totalUsers || 25,
-                    totalResources: 8,
+                    totalUsers: t.totalUsers || 1,
+                    totalResources: 5,
                     monthlyRevenue: t.monthlyRevenue !== undefined ? t.monthlyRevenue : (t.planDetails ? t.planDetails.price : (t.plan === 'enterprise' ? 199 : t.plan === 'premium' ? 49 : 0)),
                     createdAt: t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '2026-03-01'
                 }));
                 setTenants(merged);
+            } else {
+                setTenants([]);
+            }
+
+            if (revenueRes.data && revenueRes.data.success && revenueRes.data.data) {
+                setAnalytics(revenueRes.data.data);
+            }
+
+            if (transRes.data && transRes.data.success && Array.isArray(transRes.data.data)) {
+                setTransactions(transRes.data.data);
             }
         } catch (err) {
-            console.warn('API /tenants error or offline, using fallback mock data:', err);
+            console.warn('API /tenants error or offline:', err);
+            setTenants([]);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -224,8 +171,8 @@ export default function SuperAdminDashboardPage() {
         return matchesSearch && matchesFilter;
     });
 
-    const totalUsersSum = tenants.reduce((acc, curr) => acc + (curr.totalUsers || 0), 0);
-    const totalRevenueSum = tenants.reduce((acc, curr) => acc + (curr.monthlyRevenue || 0), 0);
+    const totalUsersSum = analytics ? analytics.totalUsers : tenants.reduce((acc, curr) => acc + (curr.totalUsers || 0), 0);
+    const totalRevenueSum = analytics ? analytics.mrrUSD : tenants.reduce((acc, curr) => acc + (curr.monthlyRevenue || 0), 0);
     const paidCount = tenants.filter(t => t.plan !== 'free').length;
 
     return (
@@ -473,6 +420,71 @@ export default function SuperAdminDashboardPage() {
                                                 </tr>
                                             );
                                         })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Real-time Payment Transactions Table (Top 3 Recent) */}
+                    <div className="mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-extrabold text-gray-900">Giao Dịch Nạp Tiền / Thanh Toán Gần Đây (3 Mới Nhất)</h2>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-pink-100 text-pink-700">Audit Log</span>
+                        </div>
+                        <button
+                            onClick={() => router.push('/dashboard/revenue')}
+                            className="text-xs font-bold text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                            Xem Tất Cả Doanh Thu & Lịch Sử ({transactions.length}) →
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-8">
+                        {transactions.length === 0 ? (
+                            <div className="p-8 text-center text-gray-400 text-sm">
+                                Chưa có giao dịch thanh toán nào được ghi nhận trên MongoDB.
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[850px]">
+                                    <thead>
+                                        <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase text-gray-400 tracking-wider">
+                                            <th className="py-4 px-6">Mã Giao Dịch (Ref)</th>
+                                            <th className="py-4 px-6">Doanh Nghiệp Thanh Toán</th>
+                                            <th className="py-4 px-6">Gói Đăng Ký</th>
+                                            <th className="py-4 px-6 text-right">Giá Trị (VND / USD)</th>
+                                            <th className="py-4 px-6 text-center">Cổng Thanh Toán</th>
+                                            <th className="py-4 px-6 text-right">Thời Gian</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 text-sm">
+                                        {transactions.slice(0, 3).map((tx) => (
+                                            <tr key={tx._id} className="hover:bg-gray-50/70 transition-colors">
+                                                <td className="py-4 px-6 font-mono text-xs font-bold text-gray-800">
+                                                    {tx.transactionRef || tx._id}
+                                                </td>
+                                                <td className="py-4 px-6 font-bold text-gray-900">
+                                                    {tx.tenantId?.name || 'Doanh nghiệp'}
+                                                    <span className="block text-[11px] text-gray-400 font-normal">{tx.tenantId?.domain ? `${tx.tenantId.domain}.smartoffice.com` : ''}</span>
+                                                </td>
+                                                <td className="py-4 px-6 font-extrabold uppercase text-xs text-purple-700">
+                                                    {tx.planCode}
+                                                </td>
+                                                <td className="py-4 px-6 text-right font-extrabold text-emerald-600">
+                                                    {tx.amountVND ? tx.amountVND.toLocaleString('vi-VN') : '0'} VNĐ
+                                                    <span className="block text-xs font-normal text-gray-400">(${tx.amountUSD})</span>
+                                                </td>
+                                                <td className="py-4 px-6 text-center">
+                                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-pink-50 text-pink-600 border border-pink-100">
+                                                        {tx.paymentMethod?.toUpperCase() || 'MOMO'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 px-6 text-right text-xs text-gray-500 font-medium">
+                                                    {tx.createdAt ? new Date(tx.createdAt).toLocaleString('vi-VN') : 'Mới đây'}
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>

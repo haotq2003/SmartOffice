@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { createBooking, getAvailability, getMyBookings, getAllBookings, updateBookingStatus } = require('../controllers/bookingController');
-const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware');
+const { verifyToken, authorizeRoles, checkSubscriptionStatus } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
@@ -61,7 +61,7 @@ const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware')
  *       500:
  *         description: Server error
  */
-router.post('/bookings', verifyToken, createBooking);
+router.post('/bookings', verifyToken, checkSubscriptionStatus, createBooking);
 
 /**
  * @swagger
@@ -138,7 +138,7 @@ router.get('/bookings/all', verifyToken, authorizeRoles('manager', 'admin', 'sup
  *       500:
  *         description: Server error
  */
-router.patch('/bookings/:id/status', verifyToken, updateBookingStatus);
+router.patch('/bookings/:id/status', verifyToken, checkSubscriptionStatus, updateBookingStatus);
 
 /**
  * @swagger

@@ -27,61 +27,10 @@ import { Plan } from '../../types/api';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
 
-const DEFAULT_MOCK_PLANS: Plan[] = [
-    {
-        _id: 'plan-1',
-        name: 'Gói Trải Nghiệm (Free)',
-        code: 'free',
-        price: 0,
-        maxUsers: 20,
-        maxResources: 5,
-        features: [
-            'Đặt phòng họp theo giờ',
-            'Mượn thiết bị cơ bản',
-            'Tối đa 20 nhân viên',
-            'Hỗ trợ qua email'
-        ],
-        description: 'Dành cho các nhóm nhỏ hoặc startup mới bắt đầu dùng thử SmartOffice.'
-    },
-    {
-        _id: 'plan-2',
-        name: 'Gói Chuyên Nghiệp (Premium)',
-        code: 'premium',
-        price: 49,
-        maxUsers: 100,
-        maxResources: 25,
-        features: [
-            'Tất cả tính năng gói Free',
-            'Mượn thiết bị theo ngày',
-            'Mô phỏng quẹt thẻ mở cửa Smart Lock',
-            'Thông báo trễ hạn tự động (Cron Worker)',
-            'Hỗ trợ kỹ thuật 24/7'
-        ],
-        description: 'Phù hợp cho các doanh nghiệp vừa và nhỏ mở rộng quy mô vận hành.'
-    },
-    {
-        _id: 'plan-3',
-        name: 'Gói Tập Đoàn (Enterprise)',
-        code: 'enterprise',
-        price: 199,
-        maxUsers: -1,
-        maxResources: -1,
-        features: [
-            'Tất cả tính năng gói Premium',
-            'Không giới hạn số lượng nhân viên',
-            'Không giới hạn tài nguyên & thiết bị',
-            'Báo cáo doanh nghiệp Analytics chuyên sâu',
-            'Tích hợp tên miền Subdomain riêng',
-            'Quản trị viên chăm sóc riêng'
-        ],
-        description: 'Giải pháp toàn diện không giới hạn dành cho các tập đoàn lớn.'
-    }
-];
-
 export default function PlansManagementPage() {
     const router = useRouter();
     const [user, setUser] = useState<UserInfo | null>(null);
-    const [plans, setPlans] = useState<Plan[]>(DEFAULT_MOCK_PLANS);
+    const [plans, setPlans] = useState<Plan[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -122,11 +71,14 @@ export default function PlansManagementPage() {
         setLoading(true);
         try {
             const res = await planService.getAllPlans();
-            if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+            if (res.success && Array.isArray(res.data)) {
                 setPlans(res.data);
+            } else {
+                setPlans([]);
             }
         } catch (err) {
-            console.warn('Backend plan API error, using default mock plans:', err);
+            console.error('Error fetching plans from API:', err);
+            setPlans([]);
         } finally {
             setLoading(false);
         }

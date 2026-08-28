@@ -3,12 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
-import { Search, Users, Package, Calendar, ShieldCheck, UserPlus, Loader2, LogOut, ArrowRight, CheckCircle2, TrendingUp, Layers, PieChart } from 'lucide-react';
+import { Search, Users, Package, Calendar, ShieldCheck, UserPlus, Loader2, LogOut, ArrowRight, CheckCircle2, TrendingUp, Layers, PieChart, CreditCard, Sparkles, Check, Zap, Clock, Shield, X, AlertCircle, RefreshCw, Building } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { resourceService } from '../../services/resourceService';
 import { bookingService } from '../../services/bookingService';
+import { planService } from '../../services/planService';
+import { paymentService } from '../../services/paymentService';
+import apiClient from '../../services/apiClient';
 import { UserInfo } from '../../store/authSlice';
-import { Resource, Booking } from '../../types/api';
+import { Resource, Booking, Plan } from '../../types/api';
 import { useRouter } from 'next/navigation';
 
 const MOCK_BOOKINGS: Booking[] = [
@@ -86,10 +89,76 @@ const MOCK_BOOKINGS: Booking[] = [
 export default function AdminDashboardPage() {
     const router = useRouter();
     const [user, setUser] = useState<UserInfo | null>(null);
-    const [usersCount, setUsersCount] = useState<number>(48);
-    const [resourcesCount, setResourcesCount] = useState<number>(18);
-    const [bookings, setBookings] = useState<Booking[]>(MOCK_BOOKINGS);
+    const [usersCount, setUsersCount] = useState<number>(1);
+    const [resourcesCount, setResourcesCount] = useState<number>(0);
+    const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Subscription Plan State
+    const [currentPlan, setCurrentPlan] = useState({
+        code: 'premium',
+        name: 'Gói Chuyên Nghiệp (Premium)',
+        price: 49,
+        maxUsers: 100,
+        maxResources: 25,
+        expiryDate: '2026-09-28',
+        daysRemaining: 31,
+        status: 'active'
+    });
+
+    const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
+    const [isRenewalModalOpen, setIsRenewalModalOpen] = useState(false);
+    const [selectedPlanCode, setSelectedPlanCode] = useState<string>('premium');
+    const [renewalMonths, setRenewalMonths] = useState<number>(12);
+    const [isSubmittingRenewal, setIsSubmittingRenewal] = useState(false);
+    const [renewalSuccessMsg, setRenewalSuccessMsg] = useState<string | null>(null);
+
+    const handleOpenRenewalModal = (planCode?: string) => {
+        setSelectedPlanCode(planCode || currentPlan.code);
+        setRenewalSuccessMsg(null);
+        setIsRenewalModalOpen(true);
+    };
+
+    const handleConfirmRenewal = (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmittingRenewal(true);
+        setTimeout(() => {
+            setIsSubmittingRenewal(false);
+            setRenewalSuccessMsg('Yêu cầu gia hạn/nâng cấp gói cước đã được ghi nhận! Bộ phận CSKH SmartOffice sẽ liên hệ bạn ngay.');
+            setTimeout(() => {
+                setIsRenewalModalOpen(false);
+                setRenewalSuccessMsg(null);
+            }, 2500);
+        }, 800);
+    };
+
+    const handleMomoPayment = async (requestType: string = 'captureWallet') => {
+        setIsSubmittingRenewal(true);
+        try {
+            const selectedPlan = availablePlans.find(p => p.code === selectedPlanCode);
+            const priceUSD = selectedPlan ? selectedPlan.price : (selectedPlanCode === 'enterprise' ? 199 : selectedPlanCode === 'premium' ? 49 : 0);
+
+            const res = await paymentService.createMomoUrl({
+                planCode: selectedPlanCode,
+                priceUSD,
+                months: renewalMonths,
+                tenantId: user?.tenantId,
+                requestType
+            });
+
+            if (res.success && res.payUrl) {
+                window.location.href = res.payUrl;
+            } else {
+                alert('Khởi tạo giao dịch MoMo không thành công. Vui lòng thử lại!');
+                setIsSubmittingRenewal(false);
+            }
+        } catch (err: any) {
+            console.error('MoMo payment error:', err);
+            const backendMsg = err.response?.data?.message || err.response?.data?.data?.message || err.message || 'Lỗi kết nối cổng thanh toán MoMo Sandbox.';
+            alert(`Khởi tạo thanh toán thất bại: ${backendMsg}`);
+            setIsSubmittingRenewal(false);
+        }
+    };
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -106,26 +175,45 @@ export default function AdminDashboardPage() {
     const fetchAdminOverviewData = async () => {
         setLoading(true);
         try {
-            const [usersRes, resourcesRes, bookingsRes] = await Promise.all([
+            const [usersRes, resourcesRes, bookingsRes, plansRes, tenantRes] = await Promise.all([
                 authService.getUsers().catch(() => ({ success: false, data: [] })),
                 resourceService.getAllResources().catch(() => ({ success: false, data: [] })),
                 bookingService.getAllBookings().catch(() => ({ success: false, data: [] })),
+                planService.getAllPlans().catch(() => ({ success: false, data: [] })),
+                apiClient.get('/tenants/me').then(r => r.data).catch(() => ({ success: false, data: null })),
             ]);
 
-            if (usersRes.success && Array.isArray(usersRes.data) && usersRes.data.length > 0) {
+            if (usersRes.success && Array.isArray(usersRes.data)) {
                 setUsersCount(usersRes.data.length);
             }
-            if (resourcesRes.success && Array.isArray(resourcesRes.data) && resourcesRes.data.length > 0) {
+            if (resourcesRes.success && Array.isArray(resourcesRes.data)) {
                 setResourcesCount(resourcesRes.data.length);
             }
-            if (bookingsRes.success && Array.isArray(bookingsRes.data) && bookingsRes.data.length > 0) {
+            if (bookingsRes.success && Array.isArray(bookingsRes.data)) {
                 setBookings(bookingsRes.data);
             } else {
-                setBookings(MOCK_BOOKINGS);
+                setBookings([]);
+            }
+            if (plansRes && plansRes.success && Array.isArray(plansRes.data) && plansRes.data.length > 0) {
+                setAvailablePlans(plansRes.data);
+            }
+            if (tenantRes && tenantRes.success && tenantRes.data) {
+                const tData = tenantRes.data;
+                const pDetail = tData.planDetails || {};
+                setCurrentPlan({
+                    code: tData.plan || pDetail.code || 'free',
+                    name: pDetail.name || (tData.plan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : tData.plan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)'),
+                    price: pDetail.price !== undefined ? pDetail.price : (tData.plan === 'enterprise' ? 199 : tData.plan === 'premium' ? 49 : 0),
+                    maxUsers: pDetail.maxUsers !== undefined ? pDetail.maxUsers : (tData.plan === 'enterprise' ? -1 : tData.plan === 'premium' ? 100 : 20),
+                    maxResources: pDetail.maxResources !== undefined ? pDetail.maxResources : (tData.plan === 'enterprise' ? -1 : tData.plan === 'premium' ? 25 : 5),
+                    expiryDate: tData.expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+                    daysRemaining: tData.daysRemaining !== undefined ? tData.daysRemaining : 365,
+                    status: tData.status || 'active'
+                });
             }
         } catch (err) {
             console.error('Error fetching admin dashboard data:', err);
-            setBookings(MOCK_BOOKINGS);
+            setBookings([]);
         } finally {
             setLoading(false);
         }
@@ -137,7 +225,7 @@ export default function AdminDashboardPage() {
         router.push('/login');
     };
 
-    const displayBookings = bookings.length > 0 ? bookings : MOCK_BOOKINGS;
+    const displayBookings = bookings;
     const pendingBookings = displayBookings.filter(b => b.status === 'pending').length;
     const approvedBookings = displayBookings.filter(b => b.status === 'approved' || b.status === 'checked_in' || b.status === 'confirmed').length;
 
@@ -184,66 +272,92 @@ export default function AdminDashboardPage() {
                 {/* Content */}
                 <div className="p-8">
                     {/* Welcome Title */}
-                    <div className="flex justify-between items-end mb-8">
-                        <div>
-                            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold mb-2">
-                                <TrendingUp size={14} /> Tổng quan Vận hành Công ty
+
+
+                    {/* Active Subscription Plan Banner Widget (Dynamic Expiration Warning) */}
+                    <div className={`mb-8 border rounded-2xl p-6 shadow-sm transition-all relative overflow-hidden ${
+                        currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended'
+                            ? 'bg-rose-50/80 border-rose-200 text-rose-900 shadow-rose-100 ring-2 ring-rose-300 animate-pulse'
+                            : 'bg-white border-blue-100/80'
+                    }`}>
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/60 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10"></div>
+
+                        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                            <div className="space-y-2 max-w-xl">
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border flex items-center gap-1.5 ${
+                                        currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended'
+                                            ? 'bg-rose-100 text-rose-700 border-rose-300'
+                                            : 'bg-blue-50 text-blue-700 border-blue-100'
+                                    }`}>
+                                        <CreditCard size={13} className={currentPlan.daysRemaining <= 0 ? 'text-rose-600' : 'text-blue-600'} />
+                                        Gói Cước Đang Sử Dụng
+                                    </span>
+                                    {currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended' ? (
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-200 text-rose-800 border border-rose-300 flex items-center gap-1">
+                                            ⚠️ ĐÃ HẾT HẠN (TẠM KHÓA)
+                                        </span>
+                                    ) : (
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center gap-1">
+                                            <CheckCircle2 size={10} /> Đang hoạt động
+                                        </span>
+                                    )}
+                                </div>
+                                <h2 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
+                                    {currentPlan.name}
+                                    <span className="text-xs font-semibold text-gray-500">(${currentPlan.price}/tháng)</span>
+                                </h2>
+                                <p className="text-xs text-gray-600 leading-relaxed">
+                                    {currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended' ? (
+                                        <span className="font-bold text-rose-700">
+                                            🚨 Gói cước đã hết hạn vào ngày {currentPlan.expiryDate}. Các thao tác tạo dữ liệu mới bị tạm khóa. Vui lòng gia hạn ngay qua Ví MoMo để mở khóa!
+                                        </span>
+                                    ) : (
+                                        <>Thời hạn gói đến ngày <span className="font-bold text-gray-800">{currentPlan.expiryDate}</span> (Còn <span className="font-bold text-blue-600">{currentPlan.daysRemaining} ngày</span>). Mở khóa toàn bộ tính năng Mô phỏng cửa quẹt thẻ, Thông báo tự động và Phê duyệt nhanh.</>
+                                    )}
+                                </p>
                             </div>
-                            <h1 className="text-3xl font-extrabold text-gray-900 mb-1">Bảng Điều Khiển Quản Trị Doanh Nghiệp</h1>
-                            <p className="text-gray-500 text-xs">Theo dõi tiến độ duyệt, tài nguyên văn phòng và phân quyền nhân sự toàn hệ thống.</p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => router.push('/dashboard/users')}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-xs shadow-md shadow-blue-100 cursor-pointer"
-                            >
-                                <UserPlus size={16} /> Quản lý Nhân sự
-                            </button>
+
+                            {/* Limits & Action */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+                                <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-3.5 min-w-[150px]">
+                                    <div className="flex justify-between text-xs mb-1 font-bold">
+                                        <span className="text-gray-500 text-[11px]">Nhân sự</span>
+                                        <span className="text-gray-900">{usersCount} / {currentPlan.maxUsers}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full ${usersCount / currentPlan.maxUsers > 0.8 ? 'bg-amber-500' : 'bg-blue-600'}`}
+                                            style={{ width: `${Math.min(100, (usersCount / currentPlan.maxUsers) * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-3.5 min-w-[150px]">
+                                    <div className="flex justify-between text-xs mb-1 font-bold">
+                                        <span className="text-gray-500 text-[11px]">Tài nguyên</span>
+                                        <span className="text-gray-900">{resourcesCount} / {currentPlan.maxResources}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full ${resourcesCount / currentPlan.maxResources > 0.8 ? 'bg-purple-500' : 'bg-purple-600'}`}
+                                            style={{ width: `${Math.min(100, (resourcesCount / currentPlan.maxResources) * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => handleOpenRenewalModal()}
+                                    className="px-5 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-blue-100 flex items-center justify-center gap-2 border border-transparent whitespace-nowrap cursor-pointer shrink-0"
+                                >
+                                    <RefreshCw size={15} /> Gia Hạn / Nâng Cấp Gói
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                                <Users size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Tổng nhân sự</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{usersCount}</p>
-                            </div>
-                        </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
-                                <Package size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Tài nguyên văn phòng</p>
-                                <p className="text-2xl font-extrabold text-gray-900">{resourcesCount}</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                                <Calendar size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Lịch chờ xử lý</p>
-                                <p className="text-2xl font-extrabold text-amber-600">{pendingBookings}</p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                                <CheckCircle2 size={24} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Đơn đã phê duyệt</p>
-                                <p className="text-2xl font-extrabold text-emerald-600">{approvedBookings}</p>
-                            </div>
-                        </div>
-                    </div>
 
                     {/* Quick Access Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -320,6 +434,11 @@ export default function AdminDashboardPage() {
                                         <Loader2 className="animate-spin" size={24} />
                                         <span>Đang nạp dữ liệu quản trị...</span>
                                     </div>
+                                ) : displayBookings.length === 0 ? (
+                                    <div className="p-8 text-center text-gray-400 text-xs flex flex-col items-center justify-center gap-2">
+                                        <Calendar size={24} className="text-gray-300" />
+                                        <span>Chưa có hoạt động đặt lịch nào trong doanh nghiệp của bạn.</span>
+                                    </div>
                                 ) : (
                                     <table className="w-full text-left border-collapse">
                                         <thead>
@@ -350,8 +469,7 @@ export default function AdminDashboardPage() {
                                                         </td>
                                                         <td className="py-4 px-6 text-right">
                                                             <span
-                                                                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block ${
-                                                                    b.status === 'approved' || b.status === 'confirmed'
+                                                                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-block ${b.status === 'approved' || b.status === 'confirmed'
                                                                         ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
                                                                         : b.status === 'checked_in'
                                                                             ? 'bg-blue-50 text-blue-600 border border-blue-100'
@@ -366,11 +484,11 @@ export default function AdminDashboardPage() {
                                                             >
                                                                 {
                                                                     b.status === 'approved' ? 'Đã duyệt' :
-                                                                    b.status === 'checked_in' ? 'Đã giao' :
-                                                                    b.status === 'returned' ? 'Đã trả' :
-                                                                    b.status === 'rejected' ? 'Từ chối' :
-                                                                    b.status === 'confirmed' ? 'Xác nhận' :
-                                                                    b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
+                                                                        b.status === 'checked_in' ? 'Đã giao' :
+                                                                            b.status === 'returned' ? 'Đã trả' :
+                                                                                b.status === 'rejected' ? 'Từ chối' :
+                                                                                    b.status === 'confirmed' ? 'Xác nhận' :
+                                                                                        b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
                                                                 }
                                                             </span>
                                                         </td>
@@ -411,9 +529,6 @@ export default function AdminDashboardPage() {
                                         <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
                                             <div className="bg-emerald-500 h-full rounded-full" style={{ width: '26%' }}></div>
                                         </div>
-                                    </div>
-
-                                    <div>
                                         <div className="flex justify-between text-xs font-bold mb-1">
                                             <span className="text-gray-700">Xe công tác đưa đón</span>
                                             <span className="text-purple-600">12%</span>
@@ -434,6 +549,175 @@ export default function AdminDashboardPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Renewal & Upgrade Modal */}
+                {isRenewalModalOpen && (
+                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                        <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-gray-100 relative max-h-[90vh] overflow-y-auto">
+                            <button
+                                onClick={() => setIsRenewalModalOpen(false)}
+                                className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                                    <CreditCard size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900">Gia Hạn & Nâng Cấp Gói Cước SaaS</h2>
+                                    <p className="text-xs text-gray-500">Lựa chọn gói dịch vụ phù hợp với quy mô doanh nghiệp của bạn</p>
+                                </div>
+                            </div>
+
+                            {renewalSuccessMsg ? (
+                                <div className="my-8 p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-3">
+                                    <CheckCircle2 size={48} className="mx-auto text-emerald-600" />
+                                    <h3 className="text-lg font-bold text-emerald-900">Yêu Cầu Đã Được Gửi!</h3>
+                                    <p className="text-xs text-emerald-700 max-w-md mx-auto">{renewalSuccessMsg}</p>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleConfirmRenewal} className="mt-6 space-y-6">
+                                    {/* Plan Options */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {availablePlans.length === 0 ? (
+                                            <div className="col-span-3 p-8 text-center bg-gray-50 border border-gray-100 rounded-2xl">
+                                                <AlertCircle size={32} className="mx-auto text-amber-500 mb-2" />
+                                                <p className="font-bold text-gray-800 text-sm mb-1">Chưa có gói cước nào từ API Backend</p>
+                                                <p className="text-xs text-gray-500">Super Admin chưa tạo gói cước trong cơ sở dữ liệu. Hãy vào trang Quản lý Gói cước để thêm mới.</p>
+                                            </div>
+                                        ) : (
+                                            availablePlans.map((planItem) => {
+                                                const isSelected = selectedPlanCode === planItem.code;
+                                                const isCurrent = currentPlan.code === planItem.code;
+                                                const isPremium = planItem.code === 'premium';
+                                                const isEnterprise = planItem.code === 'enterprise';
+
+                                                return (
+                                                    <div
+                                                        key={planItem._id || planItem.code}
+                                                        onClick={() => setSelectedPlanCode(planItem.code)}
+                                                        className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between relative ${isSelected
+                                                                ? isEnterprise
+                                                                    ? 'border-purple-600 bg-purple-50/30 shadow-md'
+                                                                    : 'border-blue-600 bg-blue-50/40 shadow-md'
+                                                                : 'border-gray-100 hover:border-gray-200'
+                                                            }`}
+                                                    >
+                                                        {isPremium && (
+                                                            <div className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                                Phổ biến nhất
+                                                            </div>
+                                                        )}
+                                                        <div>
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className={`text-xs font-bold uppercase ${isEnterprise ? 'text-purple-600' : isPremium ? 'text-blue-600' : 'text-gray-500'}`}>
+                                                                    {planItem.code}
+                                                                </span>
+                                                                {isCurrent && (
+                                                                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Hiện tại</span>
+                                                                )}
+                                                            </div>
+                                                            <h4 className="font-bold text-gray-900 text-base mb-1">{planItem.name}</h4>
+                                                            <p className={`text-xl font-extrabold mb-3 ${isEnterprise ? 'text-purple-600' : isPremium ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                                ${planItem.price} <span className="text-xs font-normal text-gray-400">/ tháng</span>
+                                                            </p>
+                                                            <ul className="text-xs space-y-2 text-gray-600 mb-4">
+                                                                {Array.isArray(planItem.features) && planItem.features.length > 0 ? (
+                                                                    planItem.features.map((feat, idx) => (
+                                                                        <li key={idx} className="flex items-center gap-1.5">
+                                                                            <Check size={14} className="text-emerald-500 shrink-0" />
+                                                                            <span>{feat}</span>
+                                                                        </li>
+                                                                    ))
+                                                                ) : (
+                                                                    <>
+                                                                        <li className="flex items-center gap-1.5">
+                                                                            <Check size={14} className="text-emerald-500 shrink-0" />
+                                                                            <span>Tối đa {planItem.maxUsers === -1 ? 'Không giới hạn' : `${planItem.maxUsers} nhân viên`}</span>
+                                                                        </li>
+                                                                        <li className="flex items-center gap-1.5">
+                                                                            <Check size={14} className="text-emerald-500 shrink-0" />
+                                                                            <span>Tối đa {planItem.maxResources === -1 ? 'Không giới hạn' : `${planItem.maxResources} tài nguyên`}</span>
+                                                                        </li>
+                                                                    </>
+                                                                )}
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    {/* Duration selection */}
+                                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-900">Thời hạn gia hạn gói:</p>
+                                            <p className="text-[11px] text-gray-500">Thanh toán 12 tháng giảm thêm 15% tổng chi phí hợp đồng.</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {[3, 6, 12].map((m) => (
+                                                <button
+                                                    key={m}
+                                                    type="button"
+                                                    onClick={() => setRenewalMonths(m)}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${renewalMonths === m
+                                                            ? 'bg-blue-600 text-white shadow-sm'
+                                                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                                                        }`}
+                                                >
+                                                    {m} Tháng {m === 12 && '(-15%)'}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Payment & Contact Info Note */}
+                                    <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-start gap-3">
+                                        <Building className="text-blue-600 shrink-0 mt-0.5" size={18} />
+                                        <div className="text-xs text-blue-900 space-y-1">
+                                            <p className="font-bold">Phương thức Thanh toán & Kích hoạt Tự Động:</p>
+                                            <p className="text-blue-700 leading-relaxed">
+                                                Hệ thống hỗ trợ thanh toán trực tuyến chính thức qua cổng thanh toán Ví & Thẻ ATM MoMo Sandbox.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer Actions */}
+                                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2 border-t border-gray-100">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsRenewalModalOpen(false)}
+                                            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                                        >
+                                            Hủy
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleMomoPayment()}
+                                            disabled={isSubmittingRenewal}
+                                            className="px-6 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-pink-100 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                        >
+                                            {isSubmittingRenewal ? (
+                                                <>
+                                                    <Loader2 size={16} className="animate-spin" />
+                                                    <span>Đang chuyển MoMo ATM...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <CreditCard size={16} />
+                                                    <span>Thanh Toán Thẻ ATM (MoMo Sandbox)</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

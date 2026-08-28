@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllTenants, updateTenantPlan } = require('../controllers/tenantController');
+const { getAllTenants, updateTenantPlan, getMyTenantProfile, getRevenueAnalytics } = require('../controllers/tenantController');
 const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware');
 
 /**
@@ -9,6 +9,24 @@ const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware')
  *   name: Tenants
  *   description: Super Admin Tenant management API
  */
+
+/**
+ * @swagger
+ * /api/tenants/analytics/revenue:
+ *   get:
+ *     summary: Lấy thống kê doanh thu toàn sàn MRR/ARR và theo gói cước (Super Admin only)
+ *     tags: [Tenants]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Báo cáo tổng quan doanh thu toàn nền tảng
+ *       401:
+ *         description: Chưa xác thực
+ *       403:
+ *         description: Không có quyền Super Admin
+ */
+router.get('/analytics/revenue', verifyToken, authorizeRoles('super_admin'), getRevenueAnalytics);
 
 /**
  * @swagger
@@ -28,6 +46,7 @@ const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware')
  *       500:
  *         description: Server error
  */
+router.get('/me', verifyToken, getMyTenantProfile);
 router.get('/', verifyToken, authorizeRoles('super_admin'), getAllTenants);
 
 /**

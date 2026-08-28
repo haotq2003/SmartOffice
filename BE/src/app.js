@@ -14,6 +14,7 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const accessControlRoutes = require('./routes/accessControlRoutes');
 const planRoutes = require('./routes/planRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 const app = express();
 
 // Middleware
@@ -32,6 +33,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/access-control', accessControlRoutes);
 app.use('/api', bookingRoutes);
 app.use('/api/plans', planRoutes);
+app.use('/api/payment', paymentRoutes);
 // Basic route
 app.get('/', (req, res) => {
   res.send('API is running...');

@@ -12,8 +12,23 @@ const tenantSchema = new mongoose.Schema(
     },
     plan: {
       type: String,
-      enum: ['free', 'premium', 'enterprise'],
       default: 'free',
+    },
+    planExpiredAt: {
+      type: Date,
+    },
+    monthlyRevenue: {
+      type: Number,
+      default: 0,
+    },
+    totalRevenue: {
+      type: Number,
+      default: 0,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'suspended'],
+      default: 'active',
     },
   },
   { timestamps: true }

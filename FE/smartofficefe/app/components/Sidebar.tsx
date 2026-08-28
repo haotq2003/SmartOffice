@@ -41,7 +41,7 @@ export default function Sidebar({ activeTab }: SidebarProps) {
         { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard Platform', path: '/dashboard' },
         { id: 'tenants', icon: Building2, label: 'Doanh Nghiệp Thuê', path: '/dashboard' },
         { id: 'plans', icon: CreditCard, label: 'Quản Lý Gói Cước', path: '/dashboard/plans' },
-        { id: 'revenue', icon: DollarSign, label: 'Doanh Thu Platform', path: '/dashboard' },
+        { id: 'revenue', icon: DollarSign, label: 'Doanh Thu Platform', path: '/dashboard/revenue' },
         { id: 'door-simulator', icon: KeyRound, label: 'Mô Phỏng Quẹt Cửa', path: '/door-simulator' },
     ];
 

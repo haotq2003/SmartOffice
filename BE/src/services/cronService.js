@@ -71,18 +71,54 @@ const checkOverdueBookings = async () => {
   }
 };
 
+const Tenant = require('../models/Tenant');
+
+/**
+ * Check for expired tenant subscriptions and automatically suspend tenant
+ */
+const checkSubscriptionExpirations = async () => {
+  try {
+    const now = new Date();
+    const expiredTenants = await Tenant.find({
+      status: 'active',
+      planExpiredAt: { $ne: null, $lt: now }
+    });
+
+    for (const tenant of expiredTenants) {
+      tenant.status = 'suspended';
+      await tenant.save();
+      console.log(`[Cron] Tenant "${tenant.name}" (${tenant._id}) has been automatically suspended due to expired plan.`);
+
+      await createAndSendNotification({
+        tenantId: tenant._id,
+        title: `🔴 Cảnh báo hết hạn gói cước ${tenant.plan.toUpperCase()}`,
+        message: `Gói dịch vụ SmartOffice của doanh nghiệp bạn đã hết hạn. Vui lòng gia hạn gói cước qua Ví MoMo ngay để mở khóa hệ thống.`,
+        type: 'booking_rejected',
+        targetRole: 'admin'
+      }).catch(e => console.error('Error sending expiration notification:', e));
+    }
+  } catch (error) {
+    console.error('Error in checkSubscriptionExpirations cron job:', error);
+  }
+};
+
 /**
  * Start background cron checker running every 60 seconds
  */
 const startOverdueChecker = (intervalMs = 60000) => {
-  console.log('Overdue Equipment Cron Service started (Interval: 60s)');
+  console.log('Overdue Equipment & Subscription Expiration Cron Service started (Interval: 60s)');
   // Initial check on boot
   checkOverdueBookings();
+  checkSubscriptionExpirations();
   // Periodic check
-  setInterval(checkOverdueBookings, intervalMs);
+  setInterval(() => {
+    checkOverdueBookings();
+    checkSubscriptionExpirations();
+  }, intervalMs);
 };
 
 module.exports = {
   checkOverdueBookings,
+  checkSubscriptionExpirations,
   startOverdueChecker
 };
