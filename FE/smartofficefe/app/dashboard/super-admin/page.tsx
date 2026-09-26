@@ -3,21 +3,22 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
-import { 
-    Search, 
-    Building2, 
-    CreditCard, 
-    DollarSign, 
-    Users, 
-    ShieldCheck, 
-    Loader2, 
-    LogOut, 
-    CheckCircle2, 
-    TrendingUp, 
-    Plus, 
-    Lock, 
-    Unlock, 
-    Sparkles, 
+import UserProfileHeader from '../../components/UserProfileHeader';
+import {
+    Search,
+    Building2,
+    CreditCard,
+    DollarSign,
+    Users,
+    ShieldCheck,
+    Loader2,
+    LogOut,
+    CheckCircle2,
+    TrendingUp,
+    Plus,
+    Lock,
+    Unlock,
+    Sparkles,
     Download,
     KeyRound,
     X,
@@ -128,34 +129,36 @@ export default function SuperAdminDashboardPage() {
         }));
     };
 
-    const handleCreateTenant = (e: React.FormEvent) => {
+    const handleCreateTenant = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTenantName || !newDomain) return;
 
         setIsSubmittingNew(true);
-        setTimeout(() => {
-            const created: TenantData = {
-                _id: `tenant-${Date.now()}`,
+        try {
+            const res = await apiClient.post('/tenants', {
                 name: newTenantName,
                 domain: newDomain.toLowerCase().replace(/\s+/g, '-'),
                 plan: newPlan,
-                planName: newPlan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : newPlan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)',
-                status: 'active',
-                totalUsers: 1,
-                totalResources: 5,
-                monthlyRevenue: newPlan === 'enterprise' ? 199 : newPlan === 'premium' ? 49 : 0,
-                createdAt: new Date().toISOString().split('T')[0]
-            };
+                adminName: newAdminName || `Admin ${newTenantName}`,
+                adminEmail: newAdminEmail || `admin@${newDomain.toLowerCase().replace(/\s+/g, '-')}.com`,
+                adminPassword: 'Password123@'
+            });
 
-            setTenants(prev => [created, ...prev]);
-            setStatusMsg(`Đã tạo thành công doanh nghiệp mới: ${newTenantName} (${newDomain}.smartoffice.com)`);
-            setIsAddModalOpen(false);
-            setNewTenantName('');
-            setNewDomain('');
-            setNewAdminName('');
-            setNewAdminEmail('');
+            if (res.data?.success) {
+                setStatusMsg(`Đã tạo thành công doanh nghiệp mới: ${newTenantName} (${newDomain})`);
+                await fetchTenants();
+                setIsAddModalOpen(false);
+                setNewTenantName('');
+                setNewDomain('');
+                setNewAdminName('');
+                setNewAdminEmail('');
+            }
+        } catch (err: any) {
+            console.error('Create tenant error:', err);
+            setStatusMsg('Lỗi tạo doanh nghiệp: ' + (err.response?.data?.message || err.message));
+        } finally {
             setIsSubmittingNew(false);
-        }, 500);
+        }
     };
 
     const handleLogout = () => {
@@ -165,8 +168,8 @@ export default function SuperAdminDashboardPage() {
     };
 
     const filteredTenants = tenants.filter(t => {
-        const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              t.domain.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            t.domain.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesFilter = filterPlan === 'all' || t.plan === filterPlan;
         return matchesSearch && matchesFilter;
     });
@@ -198,22 +201,7 @@ export default function SuperAdminDashboardPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Platform Super Admin'}</p>
-                                <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Master Platform Owner</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-sm uppercase shadow-md shadow-red-100">
-                                SA
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Super Admin" />
                     </div>
                 </header>
 
@@ -323,11 +311,10 @@ export default function SuperAdminDashboardPage() {
                                 <button
                                     key={tab.value}
                                     onClick={() => setFilterPlan(tab.value as any)}
-                                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                                        filterPlan === tab.value
+                                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer ${filterPlan === tab.value
                                             ? 'bg-red-600 text-white shadow-md shadow-red-100'
                                             : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-100'
-                                    }`}
+                                        }`}
                                 >
                                     {tab.label}
                                 </button>
@@ -363,10 +350,9 @@ export default function SuperAdminDashboardPage() {
                                                 <tr key={tenant._id} className={`hover:bg-gray-50/70 transition-colors ${isSuspended ? 'bg-rose-50/30' : ''}`}>
                                                     <td className="py-4 px-6">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm uppercase ${
-                                                                tenant.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
-                                                                tenant.plan === 'premium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                                            }`}>
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm uppercase ${tenant.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
+                                                                    tenant.plan === 'premium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                                                }`}>
                                                                 {tenant.name.charAt(0)}
                                                             </div>
                                                             <div>
@@ -398,20 +384,18 @@ export default function SuperAdminDashboardPage() {
 
                                                     <td className="py-4 px-6 text-right">
                                                         <div className="flex items-center justify-end gap-3">
-                                                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
-                                                                tenant.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-100 text-rose-700 border border-rose-200'
-                                                            }`}>
+                                                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-100 text-rose-700 border border-rose-200'
+                                                                }`}>
                                                                 {tenant.status === 'active' ? '● Đang hoạt động' : '🔒 Đã tạm khóa'}
                                                             </span>
 
                                                             <button
                                                                 onClick={() => handleToggleStatus(tenant._id)}
                                                                 title={isSuspended ? 'Mở khóa hoạt động' : 'Tạm khóa công ty'}
-                                                                className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                                                                    isSuspended 
-                                                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100' 
+                                                                className={`p-2 rounded-xl border transition-colors cursor-pointer ${isSuspended
+                                                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100'
                                                                         : 'bg-white border-gray-200 text-gray-400 hover:text-rose-600 hover:bg-rose-50'
-                                                                }`}
+                                                                    }`}
                                                             >
                                                                 {isSuspended ? <Unlock size={16} /> : <Lock size={16} />}
                                                             </button>

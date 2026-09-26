@@ -7,6 +7,14 @@ export interface UserInfo {
   email: string;
   role: string;
   tenantId: string;
+  companyName?: string;
+  tenant?: {
+    _id: string;
+    name: string;
+    domain?: string;
+    plan?: string;
+    status?: string;
+  };
 }
 
 export interface AuthState {

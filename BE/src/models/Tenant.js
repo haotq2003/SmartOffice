@@ -12,10 +12,11 @@ const tenantSchema = new mongoose.Schema(
     },
     plan: {
       type: String,
-      default: 'free',
+      default: 'none',
     },
     planExpiredAt: {
       type: Date,
+      default: null,
     },
     monthlyRevenue: {
       type: Number,
@@ -27,8 +28,8 @@ const tenantSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'suspended'],
-      default: 'active',
+      enum: ['active', 'suspended', 'pending_payment'],
+      default: 'pending_payment',
     },
   },
   { timestamps: true }

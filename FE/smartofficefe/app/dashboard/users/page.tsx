@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
-import { Search, UserPlus, Shield, UserCheck, Mail, Lock, Loader2, X, Bell, LogOut } from 'lucide-react';
+import UserProfileHeader from '../../components/UserProfileHeader';
+import { Search, UserPlus, Shield, UserCheck, Mail, Lock, Loader2, X, Bell, LogOut, Building2 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
@@ -12,6 +13,7 @@ interface UserData {
     name: string;
     email: string;
     role: 'admin' | 'manager' | 'employee' | 'super_admin';
+    tenantId?: any;
     createdAt?: string;
 }
 
@@ -124,22 +126,7 @@ export default function UsersPage() {
                             <Bell size={24} />
                         </button>
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{currentUser?.name || 'User'}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{currentUser?.role || 'Admin'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm uppercase">
-                                {currentUser?.name ? currentUser.name.charAt(0) : 'A'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={currentUser} defaultRole="Admin" />
                     </div>
                 </header>
 
@@ -149,7 +136,9 @@ export default function UsersPage() {
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900 mb-2">Quản lý Nhân sự</h1>
-                            <p className="text-gray-500 text-sm">Danh sách quản lý và nhân viên trong doanh nghiệp của bạn.</p>
+                            <p className="text-gray-500 text-sm">
+                                Danh sách quản lý và nhân viên thuộc {currentUser?.companyName ? <span className="font-bold text-blue-600">{currentUser.companyName}</span> : 'doanh nghiệp của bạn'}.
+                            </p>
                         </div>
                         {currentUser?.role === 'admin' && (
                             <button
@@ -243,6 +232,7 @@ export default function UsersPage() {
                                     <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase text-gray-400 tracking-wider">
                                         <th className="py-4 px-6">Nhân sự</th>
                                         <th className="py-4 px-6">Email</th>
+                                        <th className="py-4 px-6">Doanh nghiệp</th>
                                         <th className="py-4 px-6">Vai trò</th>
                                         <th className="py-4 px-6">Ngày tham gia</th>
                                     </tr>
@@ -257,6 +247,14 @@ export default function UsersPage() {
                                                 <span className="font-semibold text-gray-900">{user.name}</span>
                                             </td>
                                             <td className="py-4 px-6 text-gray-600">{user.email}</td>
+                                            <td className="py-4 px-6 text-gray-700 text-xs font-semibold">
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/70 text-slate-700">
+                                                    <Building2 size={12} className="text-blue-600 shrink-0" />
+                                                    <span className="truncate max-w-[140px]" title={typeof user.tenantId === 'object' && user.tenantId?.name ? user.tenantId.name : (currentUser?.companyName || 'SmartOffice')}>
+                                                        {typeof user.tenantId === 'object' && user.tenantId?.name ? user.tenantId.name : (currentUser?.companyName || 'SmartOffice')}
+                                                    </span>
+                                                </span>
+                                            </td>
                                             <td className="py-4 px-6">
                                                 <span
                                                     className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-block ${user.role === 'admin'

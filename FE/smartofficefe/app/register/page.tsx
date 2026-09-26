@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
+import { useDispatch } from 'react-redux';
+import { setCredentials } from '../store/authSlice';
 import { authService } from '../services/authService';
 import { ArrowRight, Building2, User, Mail, Lock, Globe, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
@@ -31,6 +33,7 @@ type RegisterFormInputs = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const dispatch = useDispatch();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -48,7 +51,17 @@ export default function RegisterPage() {
     try {
       const response = await authService.registerTenant(data);
       if (response.success) {
-        router.push('/login?registered=true');
+        if (response.data?.token && response.data?.user) {
+          dispatch(
+            setCredentials({
+              token: response.data.token,
+              user: response.data.user,
+            })
+          );
+          router.push('/dashboard?newCompany=true');
+        } else {
+          router.push('/login?registered=true');
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || err.message || 'Có lỗi xảy ra trong quá trình đăng ký. Vui lòng thử lại.');

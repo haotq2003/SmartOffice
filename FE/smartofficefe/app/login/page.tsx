@@ -56,13 +56,18 @@ function LoginContent() {
     try {
       const response = await authService.login(data);
       if (response.success && response.data) {
+        const loggedUser = response.data.user;
         dispatch(
           setCredentials({
             token: response.data.token,
-            user: response.data.user,
+            user: loggedUser,
           })
         );
-        router.push('/dashboard');
+        const comp = loggedUser.companyName ? ` - ${loggedUser.companyName}` : '';
+        setSuccessMsg(`Đăng nhập thành công! Chào mừng bạn đến với SmartOffice${comp}.`);
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 600);
       }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || err.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại email hoặc mật khẩu.');

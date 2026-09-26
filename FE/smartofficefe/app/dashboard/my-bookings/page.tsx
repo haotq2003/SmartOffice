@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Package, LogOut, AlertTriangle } from 'lucide-react';
 import { bookingService } from '../../services/bookingService';
 import { Booking } from '../../types/api';
@@ -16,7 +17,7 @@ export default function MyBookingsPage() {
     const [loadingBookings, setLoadingBookings] = useState(true);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [historyFilter, setHistoryFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'pending' | 'approved' | 'returned' | 'rejected'>('all');
 
     // Custom Modal & Toast States
     const [selectedCancelBooking, setSelectedCancelBooking] = useState<Booking | null>(null);
@@ -42,7 +43,7 @@ export default function MyBookingsPage() {
                 setMyBookings(res.data);
             }
         } catch (err) {
-            console.error('Error fetching bookings:', err);
+            console.error('Error fetching my bookings:', err);
         } finally {
             setLoadingBookings(false);
         }
@@ -79,6 +80,7 @@ export default function MyBookingsPage() {
 
     const pendingCount = myBookings.filter(b => b.status === 'pending').length;
     const approvedCount = myBookings.filter(b => b.status === 'approved' || b.status === 'checked_in' || b.status === 'confirmed').length;
+    const returnedCount = myBookings.filter(b => b.status === 'returned').length;
     const rejectedCount = myBookings.filter(b => b.status === 'rejected' || b.status === 'no_show' || b.status === 'cancelled').length;
 
     const filteredBookings = myBookings.filter((b) => {
@@ -89,6 +91,7 @@ export default function MyBookingsPage() {
         const matchesStatus = historyFilter === 'all' || 
             b.status === historyFilter || 
             (historyFilter === 'approved' && (b.status === 'checked_in' || b.status === 'confirmed')) ||
+            (historyFilter === 'returned' && b.status === 'returned') ||
             (historyFilter === 'rejected' && (b.status === 'no_show' || b.status === 'cancelled'));
         return matchesSearch && matchesStatus;
     });
@@ -116,53 +119,42 @@ export default function MyBookingsPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Nhân viên'}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{user?.role || 'Employee'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm uppercase">
-                                {user?.name ? user.name.charAt(0) : 'E'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Employee" />
                     </div>
                 </header>
 
                 {/* Content Area */}
                 <div className="p-8">
-                    <div className="mb-6 flex justify-between items-center flex-wrap gap-4">
-                        <div>
-                            <h1 className="text-2xl font-extrabold text-gray-900">Lịch sử Đặt lịch của Tôi</h1>
-                            <p className="text-gray-500 text-xs mt-1">Theo dõi tiến độ duyệt và danh sách các phòng họp, thiết bị bạn đã đăng ký.</p>
-                        </div>
+                    {/* Title */}
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-extrabold text-gray-900 mb-2">Lịch Sử Đặt Phòng & Thiết Bị</h1>
+                        <p className="text-gray-500 text-sm">Theo dõi danh sách các đơn mượn thiết bị và đặt phòng họp của bạn.</p>
                     </div>
 
-                    {/* Notification Toast / Status Alert Banner */}
+                    {/* Status Toast */}
                     {statusToast && (
-                        <div className={`mb-6 p-4 rounded-2xl border text-sm font-medium flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 ${
-                            statusToast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'
+                        <div className={`mb-6 p-4 rounded-xl text-sm font-medium flex items-center justify-between shadow-sm border animate-in fade-in slide-in-from-top-2 ${
+                            statusToast.type === 'success' 
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                : 'bg-rose-50 text-rose-800 border-rose-200'
                         }`}>
                             <div className="flex items-center gap-2">
-                                {statusToast.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <AlertTriangle size={18} className="text-red-600" />}
+                                {statusToast.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-600" /> : <XCircle size={18} className="text-rose-600" />}
                                 <span>{statusToast.message}</span>
                             </div>
-                            <button onClick={() => setStatusToast(null)} className="text-xs opacity-60 hover:opacity-100 font-bold">Làm mới</button>
+                            <button onClick={() => setStatusToast(null)} className="text-xs font-bold opacity-60 hover:opacity-100 cursor-pointer">
+                                Đóng
+                            </button>
                         </div>
                     )}
 
-                    {/* Filter Pills (Manager Style) */}
+                    {/* Filter Tabs */}
                     <div className="flex gap-2 mb-6 flex-wrap">
                         {[
                             { label: `Chờ duyệt (${pendingCount})`, value: 'pending' },
-                            { label: `Đã duyệt (${approvedCount})`, value: 'approved' },
-                            { label: `Từ chối (${rejectedCount})`, value: 'rejected' },
+                            { label: `Đang mượn / Đã duyệt (${approvedCount})`, value: 'approved' },
+                            { label: `Đã trả thiết bị (${returnedCount})`, value: 'returned' },
+                            { label: `Từ chối / Đã hủy (${rejectedCount})`, value: 'rejected' },
                             { label: `Tất cả (${myBookings.length})`, value: 'all' }
                         ].map((tab) => (
                             <button
@@ -227,44 +219,53 @@ export default function MyBookingsPage() {
                                                          className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1.5 ${
                                                              ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime))
                                                                  ? 'bg-rose-100 text-rose-700 border border-rose-200 animate-pulse'
-                                                                 : b.status === 'approved' || b.status === 'confirmed'
-                                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                                     : b.status === 'checked_in'
-                                                                         ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                                                                         : b.status === 'no_show'
-                                                                        ? 'bg-purple-50 text-purple-600 border border-purple-100'
-                                                                        : b.status === 'rejected'
-                                                                            ? 'bg-red-50 text-red-600 border border-red-100'
-                                                                            : b.status === 'cancelled'
-                                                                                ? 'bg-gray-50 text-gray-600 border border-gray-100'
-                                                                                : 'bg-amber-50 text-amber-600 border border-amber-100'
-                                                            }`}
-                                                    >
-                                                        {(b.status === 'approved' || b.status === 'confirmed' || b.status === 'checked_in') && <CheckCircle2 size={14} />}
-                                                        {(b.status === 'rejected' || b.status === 'no_show' || b.status === 'cancelled') && <XCircle size={14} />}
-                                                        {b.status === 'pending' && <AlertCircle size={14} />}
-                                                        {
-                                                            ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime)) ? '⚠️ Quá hạn trả' :
-                                                            b.status === 'approved' ? 'Đã duyệt' :
-                                                            b.status === 'checked_in' ? 'Đã giao thiết bị' :
-                                                            b.status === 'no_show' ? 'Báo không lấy' :
-                                                            b.status === 'rejected' ? 'Từ chối' :
-                                                            b.status === 'confirmed' ? 'Xác nhận' :
-                                                            b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
-                                                        }
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 px-6 text-right">
-                                                    {(b.status === 'pending' || b.status === 'approved') && (
-                                                        <button
-                                                            onClick={() => setSelectedCancelBooking(b)}
-                                                            className="px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
-                                                        >
-                                                            <XCircle size={14} />
-                                                            Hủy đơn
-                                                        </button>
-                                                    )}
-                                                </td>
+                                                                 : b.status === 'returned'
+                                                                     ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                                                     : b.status === 'approved' || b.status === 'confirmed'
+                                                                         ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                                         : b.status === 'checked_in'
+                                                                             ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                                             : b.status === 'no_show'
+                                                                                 ? 'bg-purple-50 text-purple-600 border border-purple-100'
+                                                                                 : b.status === 'rejected'
+                                                                                     ? 'bg-red-50 text-red-600 border border-red-100'
+                                                                                     : b.status === 'cancelled'
+                                                                                         ? 'bg-gray-50 text-gray-600 border border-gray-100'
+                                                                                         : 'bg-amber-50 text-amber-600 border border-amber-100'
+                                                             }`}
+                                                     >
+                                                         {b.status === 'returned' && <CheckCircle2 size={14} className="text-teal-600" />}
+                                                         {(b.status === 'approved' || b.status === 'confirmed' || b.status === 'checked_in') && <CheckCircle2 size={14} />}
+                                                         {(b.status === 'rejected' || b.status === 'no_show' || b.status === 'cancelled') && <XCircle size={14} />}
+                                                         {b.status === 'pending' && <AlertCircle size={14} />}
+                                                         {
+                                                             ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime)) ? '⚠️ Quá hạn trả' :
+                                                             b.status === 'returned' ? 'Đã trả thiết bị' :
+                                                             b.status === 'approved' ? 'Đã duyệt' :
+                                                             b.status === 'checked_in' ? 'Đã giao thiết bị' :
+                                                             b.status === 'no_show' ? 'Báo không lấy' :
+                                                             b.status === 'rejected' ? 'Từ chối' :
+                                                             b.status === 'confirmed' ? 'Xác nhận' :
+                                                             b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
+                                                         }
+                                                     </span>
+                                                 </td>
+                                                 <td className="py-4 px-6 text-right">
+                                                     {(b.status === 'pending' || b.status === 'approved') && (
+                                                         <button
+                                                             onClick={() => setSelectedCancelBooking(b)}
+                                                             className="px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                                                         >
+                                                             <XCircle size={14} />
+                                                             Hủy đơn
+                                                         </button>
+                                                     )}
+                                                     {b.status === 'returned' && (
+                                                         <span className="text-xs font-bold text-teal-600 inline-flex items-center gap-1">
+                                                             <CheckCircle2 size={13} /> Hoàn tất
+                                                         </span>
+                                                     )}
+                                                 </td>
                                             </tr>
                                         );
                                     })}

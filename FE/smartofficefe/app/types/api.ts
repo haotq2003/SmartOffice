@@ -13,12 +13,16 @@ export interface UserInfo {
   email: string;
   role: 'super_admin' | 'admin' | 'manager' | 'employee';
   tenantId: string;
+  companyName?: string;
+  tenant?: TenantInfo;
 }
 
 export interface TenantInfo {
   _id: string;
   name: string;
   domain: string;
+  plan?: string;
+  status?: string;
 }
 
 // Auth DTOs
@@ -43,6 +47,7 @@ export interface RegisterTenantPayload {
 }
 
 export interface RegisterTenantData {
+  token?: string;
   tenant: TenantInfo;
   user: UserInfo;
 }

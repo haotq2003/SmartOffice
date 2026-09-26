@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const querystring = require('qs');
+const querystring = require('querystring');
 const Tenant = require('../models/Tenant');
 const Plan = require('../models/Plan');
 const Transaction = require('../models/Transaction');
@@ -45,7 +45,7 @@ const createPaymentUrl = async (req, res) => {
             ("0" + date.getSeconds()).slice(-2);
 
         const orderId = date.getTime().toString();
-        const orderInfo = `Thanh toan gia han goi ${planCode || 'premium'} (${months || 12} thang) SmartOffice`;
+        const orderInfo = `Thanh toan goi ${planCode || 'premium'} (${months || 12} thang) SmartOffice - TenantId:${tenantId || ''}`;
         const orderType = 'billpayment';
         const locale = 'vn';
         const currCode = 'VND';
@@ -107,8 +107,8 @@ const vnpayReturn = async (req, res) => {
         if (isSuccess) {
             const orderInfo = vnp_Params['vnp_OrderInfo'] || '';
             let planCode = 'premium';
-            if (orderInfo.toLowerCase().includes('free')) planCode = 'free';
             if (orderInfo.toLowerCase().includes('enterprise')) planCode = 'enterprise';
+            else if (orderInfo.toLowerCase().includes('free')) planCode = 'free';
 
             let monthsToAdd = 12;
             const match = orderInfo.match(/\((\d+)\s*thang\)/i);
@@ -116,8 +116,24 @@ const vnpayReturn = async (req, res) => {
                 monthsToAdd = parseInt(match[1]);
             }
 
-            const tenant = await Tenant.findOne();
+            let targetTenantId = null;
+            const tenantMatch = orderInfo.match(/TenantId:([a-fA-F0-9]{24})/);
+            if (tenantMatch && tenantMatch[1]) {
+                targetTenantId = tenantMatch[1];
+            }
+
+            let tenant = null;
+            if (targetTenantId) {
+                tenant = await Tenant.findById(targetTenantId);
+            }
+            if (!tenant) {
+                tenant = await Tenant.findOne();
+            }
+
             if (tenant) {
+                const planObj = await Plan.findOne({ code: planCode });
+                const priceUSD = planObj ? planObj.price : (planCode === 'enterprise' ? 199 : planCode === 'premium' ? 49 : 0);
+
                 const now = new Date();
                 const isSamePlan = tenant.plan === planCode;
                 let baseDate = (isSamePlan && tenant.planExpiredAt && new Date(tenant.planExpiredAt) > now)
@@ -126,13 +142,16 @@ const vnpayReturn = async (req, res) => {
                 baseDate.setMonth(baseDate.getMonth() + monthsToAdd);
 
                 tenant.plan = planCode;
+                tenant.status = 'active'; // Kích hoạt ngay doanh nghiệp
                 tenant.planExpiredAt = baseDate;
+                tenant.monthlyRevenue = priceUSD;
+                tenant.totalRevenue = (tenant.totalRevenue || 0) + priceUSD;
                 await tenant.save();
 
                 await Transaction.create({
                     tenantId: tenant._id,
                     planCode,
-                    amountUSD: planCode === 'enterprise' ? 199 : planCode === 'premium' ? 49 : 0,
+                    amountUSD: priceUSD,
                     amountVND: parseInt(vnp_Params['vnp_Amount']) / 100 || 0,
                     months: monthsToAdd,
                     paymentMethod: 'vnpay',
@@ -314,6 +333,7 @@ const verifyMomoReturn = async (req, res) => {
                 baseDate.setMonth(baseDate.getMonth() + (paidMonths || 12));
 
                 tenant.plan = planCode;
+                tenant.status = 'active'; // Kích hoạt ngay doanh nghiệp
                 tenant.planExpiredAt = baseDate;
                 tenant.monthlyRevenue = priceUSD;
                 tenant.totalRevenue = (tenant.totalRevenue || 0) + priceUSD;

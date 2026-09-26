@@ -40,4 +40,12 @@ export const authService = {
     const response = await apiClient.get<ApiResponse>('/auth/users');
     return response.data;
   },
+
+  /**
+   * Lấy thông tin user hiện tại kèm thông tin tenant/công ty
+   */
+  async getMe(): Promise<ApiResponse<any>> {
+    const response = await apiClient.get<ApiResponse<any>>('/auth/me');
+    return response.data;
+  },
 };

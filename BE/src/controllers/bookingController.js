@@ -374,8 +374,21 @@ const updateBookingStatus = async (req, res) => {
 
     // 1. Trigger notification & email to the booking creator (Employee)
     if (booking.userId) {
-      const statusText = status === 'approved' ? 'đã được Phê duyệt thành công' : status === 'rejected' ? 'đã bị Từ chối' : 'đã cập nhật về Chờ duyệt';
-      const type = status === 'approved' ? 'booking_approved' : status === 'rejected' ? 'booking_rejected' : 'booking_created';
+      const statusText = 
+        status === 'approved' ? 'đã được Phê duyệt thành công' :
+        status === 'rejected' ? 'đã bị Từ chối' :
+        status === 'checked_in' ? 'đã được Giao thiết bị thành công' :
+        status === 'returned' ? 'đã được Xác nhận trả thiết bị (Hoàn tất)' :
+        status === 'no_show' ? 'bị đánh dấu Không đến nhận' :
+        status === 'cancelled' ? 'đã bị Hủy' :
+        'đã cập nhật về Chờ duyệt';
+
+      const type = 
+        status === 'approved' ? 'booking_approved' :
+        status === 'rejected' ? 'booking_rejected' :
+        status === 'returned' ? 'booking_approved' :
+        status === 'checked_in' ? 'booking_approved' :
+        'booking_created';
 
       createAndSendNotification({
         tenantId: req.user.tenantId,

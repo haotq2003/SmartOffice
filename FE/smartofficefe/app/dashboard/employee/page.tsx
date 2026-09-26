@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Plus, Loader2, X, Bell, LogOut, Package } from 'lucide-react';
 import { resourceService } from '../../services/resourceService';
 import { bookingService } from '../../services/bookingService';
@@ -163,6 +164,27 @@ export default function EmployeeDashboardPage() {
             }
             startISO = new Date(`${borrowDate}T00:00:00.000`).toISOString();
             endISO = new Date(`${returnDate}T23:59:59.999`).toISOString();
+
+            // Client-side check: prevent borrowing the same equipment twice in overlapping period
+            const startReq = new Date(startISO).getTime();
+            const endReq = new Date(endISO).getTime();
+            const overlapBooking = myBookings.find(b => {
+                const rId = typeof b.resourceId === 'object' ? (b.resourceId as any)?._id : b.resourceId;
+                if (rId !== selectedResource._id) return false;
+                if (!['pending', 'approved', 'checked_in', 'confirmed'].includes(b.status)) return false;
+                const bStart = new Date(b.startTime).getTime();
+                const bEnd = new Date(b.endTime).getTime();
+                return startReq < bEnd && endReq > bStart;
+            });
+
+            if (overlapBooking) {
+                const statusLabel =
+                    overlapBooking.status === 'pending' ? 'đang chờ duyệt' :
+                    overlapBooking.status === 'approved' ? 'đã duyệt' :
+                    overlapBooking.status === 'checked_in' ? 'đang trong thời gian mượn' : 'đã xác nhận';
+                setErrorMsg(`Bạn đã có đơn mượn thiết bị này (${statusLabel}) trong khung thời gian này. Nếu muốn mượn thêm số lượng, vui lòng chọn số lượng khi tạo đơn hoặc hủy đơn cũ.`);
+                return;
+            }
         } else {
             if (!startTime || !endTime) {
                 setErrorMsg('Vui lòng chọn thời gian bắt đầu và kết thúc.');
@@ -232,22 +254,7 @@ export default function EmployeeDashboardPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Employee'}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{user?.role || 'Employee'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm uppercase">
-                                {user?.name ? user.name.charAt(0) : 'E'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Employee" />
                     </div>
                 </header>
 
@@ -457,6 +464,29 @@ export default function EmployeeDashboardPage() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Warning if user already has an active booking for this equipment */}
+                        {selectedResource.type === 'equipment' && (() => {
+                            const activeUserLoan = myBookings.find(b => {
+                                const rId = typeof b.resourceId === 'object' ? (b.resourceId as any)?._id : b.resourceId;
+                                return rId === selectedResource._id && ['pending', 'approved', 'checked_in'].includes(b.status);
+                            });
+                            if (!activeUserLoan) return null;
+                            const statusLabel =
+                                activeUserLoan.status === 'pending' ? 'đang chờ duyệt' :
+                                activeUserLoan.status === 'approved' ? 'đã duyệt' : 'đang trong thời gian mượn';
+                            return (
+                                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-start gap-2">
+                                    <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-bold">Bạn đang có đơn mượn thiết bị này ({statusLabel})</p>
+                                        <p className="text-[11px] text-amber-700 mt-0.5">
+                                            Thời gian: {new Date(activeUserLoan.startTime).toLocaleDateString('vi-VN')} - {new Date(activeUserLoan.endTime).toLocaleDateString('vi-VN')}. Không thể tạo thêm đơn mượn trùng khung giờ này.
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })()}
 
                         {errorMsg && (
                             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl">

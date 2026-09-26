@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { Search, Bell, CheckSquare, XCircle, CheckCircle2, Clock, Calendar, UserCheck, Loader2, LogOut } from 'lucide-react';
 import { bookingService } from '../../services/bookingService';
 import { Booking } from '../../types/api';
@@ -14,7 +15,7 @@ export default function ManagerDashboardPage() {
     const [user, setUser] = useState<UserInfo | null>(null);
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+    const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'returned' | 'rejected'>('pending');
     const [searchQuery, setSearchQuery] = useState('');
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -85,12 +86,14 @@ export default function ManagerDashboardPage() {
         const matchesTab = activeTab === 'all' || 
             b.status === activeTab || 
             (activeTab === 'approved' && b.status === 'checked_in') || 
+            (activeTab === 'returned' && b.status === 'returned') || 
             (activeTab === 'rejected' && b.status === 'no_show');
         return matchesSearch && matchesTab;
     });
 
     const pendingCount = bookings.filter(b => b.status === 'pending').length;
     const approvedCount = bookings.filter(b => b.status === 'approved' || b.status === 'checked_in').length;
+    const returnedCount = bookings.filter(b => b.status === 'returned').length;
     const rejectedCount = bookings.filter(b => b.status === 'rejected' || b.status === 'no_show').length;
 
     return (
@@ -116,22 +119,7 @@ export default function ManagerDashboardPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Manager'}</p>
-                                <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">{user?.role || 'Manager'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm uppercase">
-                                {user?.name ? user.name.charAt(0) : 'M'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Manager" />
                     </div>
                 </header>
 
@@ -198,6 +186,7 @@ export default function ManagerDashboardPage() {
                         {[
                             { label: `Chờ duyệt (${pendingCount})`, value: 'pending' },
                             { label: `Đã duyệt (${approvedCount})`, value: 'approved' },
+                            { label: `Đã trả (${returnedCount})`, value: 'returned' },
                             { label: `Từ chối (${rejectedCount})`, value: 'rejected' },
                             { label: `Tất cả (${bookings.length})`, value: 'all' }
                         ].map((tab) => (

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { authService } from '../services/authService';
 import {
     LayoutDashboard,
     CheckSquare,
@@ -23,6 +24,7 @@ interface SidebarProps {
 export default function Sidebar({ activeTab }: SidebarProps) {
     const router = useRouter();
     const [role, setRole] = useState<string>('');
+    const [companyName, setCompanyName] = useState<string>('');
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -30,6 +32,18 @@ export default function Sidebar({ activeTab }: SidebarProps) {
             try {
                 const parsed = JSON.parse(storedUser);
                 setRole(parsed.role || 'employee');
+                if (parsed.companyName) {
+                    setCompanyName(parsed.companyName);
+                } else if (parsed.role === 'super_admin') {
+                    setCompanyName('Hệ thống SmartOffice');
+                } else {
+                    authService.getMe().then((res) => {
+                        if (res.success && res.data?.companyName) {
+                            setCompanyName(res.data.companyName);
+                            localStorage.setItem('user', JSON.stringify({ ...parsed, companyName: res.data.companyName }));
+                        }
+                    }).catch(() => {});
+                }
             } catch (e) {
                 console.error(e);
             }
@@ -99,11 +113,28 @@ export default function Sidebar({ activeTab }: SidebarProps) {
             </div>
 
             {/* Role indicator badge */}
-            <div className="px-6 pt-4 pb-2">
+            <div className="px-5 pt-3 pb-1">
                 <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-md border block text-center whitespace-nowrap overflow-hidden truncate ${currentRoleConfig.badgeBg}`}>
                     {currentRoleConfig.title}
                 </span>
             </div>
+
+            {/* Company / Doanh nghiệp Badge Card */}
+            {companyName && (
+                <div className="px-4 pt-1 pb-2">
+                    <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-50/80 border border-slate-200/80 rounded-xl hover:bg-slate-100/80 transition-colors shadow-2xs">
+                        <div className="w-7 h-7 rounded-lg bg-blue-100/90 text-blue-700 flex items-center justify-center shrink-0 shadow-2xs">
+                            <Building2 size={15} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <span className="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider block leading-tight">Công ty</span>
+                            <span className="text-xs font-bold text-gray-800 truncate block leading-tight mt-0.5" title={companyName}>
+                                {companyName}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Dedicated Role Navigation */}
             <nav className="flex-1 px-4 mt-2 space-y-1 overflow-y-auto">
@@ -123,10 +154,12 @@ export default function Sidebar({ activeTab }: SidebarProps) {
             </nav>
 
             {/* Role specific Footer info */}
-            <div className="p-6 border-t border-gray-100 bg-gray-50/50">
-                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium whitespace-nowrap">
-                    <Shield size={14} className="shrink-0" />
-                    <span>Multi-Tenant Mode</span>
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+                <div className="flex items-center gap-2 text-xs text-gray-500 font-medium whitespace-nowrap overflow-hidden">
+                    <Shield size={14} className="shrink-0 text-blue-600" />
+                    <span className="truncate font-semibold text-gray-600" title={companyName || 'Multi-Tenant Mode'}>
+                        {companyName || 'Multi-Tenant Mode'}
+                    </span>
                 </div>
             </div>
         </aside>

@@ -1,0 +1,68 @@
+
+
+services:
+  # 1. MongoDB Database
+  mongo:
+    image: mongo:7.0
+    container_name: smartoffice_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - smartoffice-net
+
+  # 2. Backend Service
+  backend:
+    build:
+      context: ./BE
+      dockerfile: Dockerfile
+    container_name: smartoffice_be
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      # Lưu ý: Kết nối tới service "mongo" qua network Docker thay vì localhost
+      - MONGO_URI=mongodb://mongo:27017/smartoffice
+      - JWT_SECRET=super_secret_jwt_key_for_smart_office_123!
+      - CHOKIDAR_USEPOLLING=true
+    env_file:
+      - ./BE/.env
+    volumes:
+      # Mount code từ máy thật vào container để Hot-Reload khi sửa code
+      - ./BE:/app
+      - /app/node_modules
+    depends_on:
+      - mongo
+    networks:
+      - smartoffice-net
+
+  # 3. Frontend Service (Next.js)
+  frontend:
+    build:
+      context: ./FE/smartofficefe
+      dockerfile: Dockerfile
+    container_name: smartoffice_fe
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./FE/smartofficefe:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - smartoffice-net
+
+volumes:
+  mongo_data:
+
+networks:
+  smartoffice-net:
+    driver: bridge

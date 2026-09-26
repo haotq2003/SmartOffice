@@ -1,6 +1,6 @@
 const express = require('express');
-const { registerTenant, login, createUser, getUsers } = require('../controllers/authController');
-const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware');
+const { registerTenant, login, getMe, createUser, getUsers } = require('../controllers/authController');
+const { verifyToken, authorizeRoles, checkSubscriptionStatus } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
@@ -76,6 +76,7 @@ router.post('/register-tenant', registerTenant);
  *         description: Server error
  */
 router.post('/login', login);
+router.get('/me', verifyToken, getMe);
 
 /**
  * @swagger
@@ -120,7 +121,7 @@ router.post('/login', login);
  *       500:
  *         description: Server error
  */
-router.post('/create-user', verifyToken, authorizeRoles('admin'), createUser);
+router.post('/create-user', verifyToken, authorizeRoles('admin'), checkSubscriptionStatus, createUser);
 
 /**
  * @swagger

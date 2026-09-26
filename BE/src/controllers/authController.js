@@ -18,8 +18,14 @@ const registerTenant = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email already in use.' });
     }
 
-    // Create Tenant
-    const tenant = await Tenant.create({ name: tenantName, domain, plan: 'free' });
+    // Create Tenant requiring subscription purchase
+    const tenant = await Tenant.create({
+      name: tenantName,
+      domain,
+      plan: 'none',
+      status: 'pending_payment',
+      planExpiredAt: null,
+    });
 
     // Hash Password
     const salt = await bcrypt.genSalt(10);
@@ -34,11 +40,43 @@ const registerTenant = async (req, res) => {
       role: 'admin',
     });
 
+    // Generate JWT for newly registered admin user
+    const payload = {
+      userId: user._id,
+      tenantId: tenant._id,
+      role: user.role,
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' });
+
     res.status(201).json({
       success: true,
+      message: 'Đăng ký doanh nghiệp thành công! Vui lòng chọn gói cước để kích hoạt hệ thống.',
       data: {
-        tenant: { _id: tenant._id, name: tenant.name, domain: tenant.domain },
-        user: { _id: user._id, name: user.name, email: user.email, role: user.role }
+        token,
+        tenant: {
+          _id: tenant._id,
+          name: tenant.name,
+          domain: tenant.domain,
+          plan: tenant.plan,
+          status: tenant.status,
+          planExpiredAt: tenant.planExpiredAt,
+        },
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          tenantId: tenant._id,
+          companyName: tenant.name,
+          tenant: {
+            _id: tenant._id,
+            name: tenant.name,
+            domain: tenant.domain,
+            plan: tenant.plan,
+            status: tenant.status,
+            planExpiredAt: tenant.planExpiredAt,
+          }
+        }
       }
     });
   } catch (error) {
@@ -50,8 +88,8 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check User
-    const user = await User.findOne({ email });
+    // Check User & populate tenant details
+    const user = await User.findOne({ email }).populate('tenantId', 'name domain plan status planExpiredAt');
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
@@ -62,20 +100,77 @@ const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
+    const tenantObj = user.tenantId && typeof user.tenantId === 'object' && user.tenantId.name ? user.tenantId : null;
+    const tenantIdVal = tenantObj ? tenantObj._id : (user.tenantId || null);
+
     // Generate JWT
     const payload = {
       userId: user._id,
-      tenantId: user.tenantId,
+      tenantId: tenantIdVal,
       role: user.role,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' });
 
+    const companyName = tenantObj ? tenantObj.name : (user.role === 'super_admin' ? 'Hệ thống SmartOffice' : 'Chưa phân bổ');
+
     res.status(200).json({
       success: true,
       data: {
         token,
-        user: { _id: user._id, name: user.name, email: user.email, role: user.role, tenantId: user.tenantId }
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          tenantId: tenantIdVal,
+          companyName,
+          tenant: tenantObj ? {
+            _id: tenantObj._id,
+            name: tenantObj.name,
+            domain: tenantObj.domain,
+            plan: tenantObj.plan,
+            status: tenantObj.status,
+            planExpiredAt: tenantObj.planExpiredAt,
+          } : null,
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId)
+      .populate('tenantId', 'name domain plan status planExpiredAt')
+      .select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const tenantObj = user.tenantId && typeof user.tenantId === 'object' && user.tenantId.name ? user.tenantId : null;
+    const tenantIdVal = tenantObj ? tenantObj._id : (user.tenantId || null);
+    const companyName = tenantObj ? tenantObj.name : (user.role === 'super_admin' ? 'Hệ thống SmartOffice' : 'Chưa phân bổ');
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        tenantId: tenantIdVal,
+        companyName,
+        tenant: tenantObj ? {
+          _id: tenantObj._id,
+          name: tenantObj.name,
+          domain: tenantObj.domain,
+          plan: tenantObj.plan,
+          status: tenantObj.status,
+          planExpiredAt: tenantObj.planExpiredAt,
+        } : null,
       }
     });
   } catch (error) {
@@ -127,11 +222,14 @@ const createUser = async (req, res) => {
 
 const getUsers = async (req, res) => {
   try {
-    const users = await User.find({ tenantId: req.user.tenantId }).select('-password').sort({ createdAt: -1 });
+    const users = await User.find({ tenantId: req.user.tenantId })
+      .populate('tenantId', 'name domain plan')
+      .select('-password')
+      .sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { registerTenant, login, createUser, getUsers };
+module.exports = { registerTenant, login, getMe, createUser, getUsers };

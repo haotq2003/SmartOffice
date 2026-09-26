@@ -109,6 +109,32 @@ const createBooking = async (bookingData) => {
       error.statusCode = 409;
       throw error;
     }
+  } else if (resource && resource.type === 'equipment') {
+    const userObjId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
+
+    // Check if user already has an active booking for this same equipment in the requested time range
+    const existingLoan = await Booking.findOne({
+      userId: userObjId,
+      resourceId: resourceObjId,
+      status: { $in: ['pending', 'confirmed', 'approved', 'checked_in'] },
+      startTime: { $lt: new Date(endTime) },
+      endTime: { $gt: new Date(startTime) }
+    });
+
+    if (existingLoan) {
+      const statusLabel =
+        existingLoan.status === 'pending' ? 'đang chờ duyệt' :
+        existingLoan.status === 'approved' ? 'đã được duyệt' :
+        existingLoan.status === 'checked_in' ? 'đang trong thời gian mượn' : 'đã xác nhận';
+
+      const error = new Error(
+        `Bạn đã có một đơn mượn thiết bị "${resource.name}" (${statusLabel}) trong khung thời gian này. Nếu muốn mượn thêm số lượng, vui lòng chọn số lượng khi tạo đơn hoặc hủy đơn cũ.`
+      );
+      error.statusCode = 409;
+      throw error;
+    }
   }
 
   const booking = new Booking({

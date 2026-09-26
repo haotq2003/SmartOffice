@@ -60,6 +60,8 @@ const updateTenantPlan = async (req, res) => {
   }
 };
 
+const bcrypt = require('bcryptjs');
+
 const getMyTenantProfile = async (req, res) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -75,32 +77,39 @@ const getMyTenantProfile = async (req, res) => {
     const totalUsers = await User.countDocuments({ tenantId: tenant._id });
     const planDetails = await Plan.findOne({ code: tenant.plan });
 
-    let expiryDate;
+    let expiryDate = null;
+    let daysRemaining = 0;
+    const now = new Date();
+
     if (tenant.planExpiredAt) {
       expiryDate = new Date(tenant.planExpiredAt);
-    } else {
-      const createdAt = tenant.createdAt || new Date();
-      expiryDate = new Date(createdAt);
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      const diffTime = expiryDate.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     }
 
-    const now = new Date();
-    const diffTime = expiryDate.getTime() - now.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const isSubscribed = tenant.status === 'active' && 
+      tenant.plan !== 'none' && 
+      !!tenant.planExpiredAt && 
+      daysRemaining > 0;
 
     res.status(200).json({
       success: true,
       data: {
         ...tenant.toObject(),
         totalUsers,
+        isSubscribed,
         planDetails: planDetails || {
-          code: tenant.plan,
-          name: tenant.plan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : tenant.plan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)',
+          code: tenant.plan || 'none',
+          name: tenant.plan === 'enterprise' 
+            ? 'Gói Tập Đoàn (Enterprise)' 
+            : tenant.plan === 'premium' 
+              ? 'Gói Chuyên Nghiệp (Premium)' 
+              : 'Chưa kích hoạt gói',
           price: tenant.plan === 'enterprise' ? 199 : tenant.plan === 'premium' ? 49 : 0,
-          maxUsers: tenant.plan === 'enterprise' ? -1 : tenant.plan === 'premium' ? 100 : 20,
-          maxResources: tenant.plan === 'enterprise' ? -1 : tenant.plan === 'premium' ? 25 : 5
+          maxUsers: tenant.plan === 'enterprise' ? -1 : tenant.plan === 'premium' ? 100 : 0,
+          maxResources: tenant.plan === 'enterprise' ? -1 : tenant.plan === 'premium' ? 25 : 0
         },
-        expiryDate: expiryDate.toISOString().split('T')[0],
+        expiryDate: expiryDate ? expiryDate.toISOString().split('T')[0] : null,
         daysRemaining
       }
     });
@@ -108,7 +117,77 @@ const getMyTenantProfile = async (req, res) => {
   catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
-}
+};
+
+const createTenant = async (req, res) => {
+  try {
+    const { name, domain, plan, adminName, adminEmail, adminPassword } = req.body;
+
+    if (!name || !domain) {
+      return res.status(400).json({ success: false, message: 'Tên và tên miền là bắt buộc.' });
+    }
+
+    const existingTenant = await Tenant.findOne({ domain });
+    if (existingTenant) {
+      return res.status(400).json({ success: false, message: 'Tên miền (domain) đã tồn tại.' });
+    }
+
+    if (adminEmail) {
+      const existingUser = await User.findOne({ email: adminEmail });
+      if (existingUser) {
+        return res.status(400).json({ success: false, message: 'Email quản trị viên đã tồn tại.' });
+      }
+    }
+
+    const assignedPlan = plan || 'none';
+    const isPaid = ['premium', 'enterprise'].includes(assignedPlan);
+    const planDetails = await Plan.findOne({ code: assignedPlan });
+
+    const now = new Date();
+    let planExpiredAt = null;
+    let status = 'pending_payment';
+
+    if (isPaid) {
+      status = 'active';
+      planExpiredAt = new Date(now);
+      planExpiredAt.setFullYear(planExpiredAt.getFullYear() + 1);
+    }
+
+    const tenant = await Tenant.create({
+      name,
+      domain,
+      plan: assignedPlan,
+      status,
+      planExpiredAt,
+      monthlyRevenue: planDetails ? planDetails.price : 0,
+    });
+
+    let adminUser = null;
+    if (adminEmail) {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(adminPassword || '123456', salt);
+      adminUser = await User.create({
+        tenantId: tenant._id,
+        name: adminName || `Admin ${name}`,
+        email: adminEmail,
+        password: hashedPassword,
+        role: 'admin',
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Tạo doanh nghiệp mới thành công.',
+      data: {
+        ...tenant.toObject(),
+        adminUser: adminUser ? { _id: adminUser._id, name: adminUser.name, email: adminUser.email } : null
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const getRevenueAnalytics = async (req, res) => {
   try {
     const tenants = await Tenant.find();
@@ -121,11 +200,16 @@ const getRevenueAnalytics = async (req, res) => {
     });
 
     let mrrUSD = 0;
-    const planCounts = { free: 0, premium: 0, enterprise: 0 };
-    const planRevenue = { free: 0, premium: 0, enterprise: 0 };
+    const planCounts = { none: 0, free: 0, premium: 0, enterprise: 0 };
+    const planRevenue = { none: 0, free: 0, premium: 0, enterprise: 0 };
 
     tenants.forEach(tenant => {
-      const code = tenant.plan || 'free';
+      const code = tenant.plan || 'none';
+      if (code === 'none' || tenant.status === 'pending_payment') {
+        planCounts.none = (planCounts.none || 0) + 1;
+        return;
+      }
+
       const price = planPriceMap[code] !== undefined 
         ? planPriceMap[code] 
         : (code === 'enterprise' ? 199 : code === 'premium' ? 49 : 0);
@@ -171,6 +255,7 @@ const getRevenueAnalytics = async (req, res) => {
         paidRate,
         paidTenantsCount,
         breakdownByPlan: {
+          none: { count: planCounts.none || 0, revenueUSD: 0, price: 0 },
           free: { count: planCounts.free || 0, revenueUSD: planRevenue.free || 0, price: planPriceMap.free || 0 },
           premium: { count: planCounts.premium || 0, revenueUSD: planRevenue.premium || 0, price: planPriceMap.premium || 49 },
           enterprise: { count: planCounts.enterprise || 0, revenueUSD: planRevenue.enterprise || 0, price: planPriceMap.enterprise || 199 }
@@ -183,4 +268,4 @@ const getRevenueAnalytics = async (req, res) => {
   }
 };
 
-module.exports = { getAllTenants, updateTenantPlan, getMyTenantProfile, getRevenueAnalytics };
+module.exports = { getAllTenants, updateTenantPlan, getMyTenantProfile, createTenant, getRevenueAnalytics };

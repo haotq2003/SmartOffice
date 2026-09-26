@@ -44,20 +44,27 @@ const checkSubscriptionStatus = async (req, res, next) => {
     }
 
     const now = new Date();
-    if (tenant.planExpiredAt && new Date(tenant.planExpiredAt) < now && tenant.status !== 'suspended') {
+    if (tenant.planExpiredAt && new Date(tenant.planExpiredAt) < now && tenant.status === 'active') {
       tenant.status = 'suspended';
       await tenant.save().catch(e => console.error(e));
     }
 
-    if (tenant.status === 'suspended') {
-      const allowedPathsForSuspended = ['/me', '/create-momo-url', '/momo-return', '/create-vnpay-url', '/vnpay-return', '/transactions'];
-      const isAllowed = allowedPathsForSuspended.some(p => req.originalUrl.includes(p));
+    const hasActiveSubscription = tenant.status === 'active' && 
+      tenant.plan !== 'none' && 
+      tenant.planExpiredAt && 
+      new Date(tenant.planExpiredAt) > now;
 
-      if (!isAllowed && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    if (!hasActiveSubscription) {
+      const allowedPaths = ['/me', '/create-momo-url', '/momo-return', '/create-vnpay-url', '/vnpay-return', '/transactions', '/plans'];
+      const isAllowed = allowedPaths.some(p => req.originalUrl.includes(p));
+
+      if (!isAllowed) {
         return res.status(403).json({
           success: false,
-          isExpired: true,
-          message: 'Gói cước dịch vụ của doanh nghiệp bạn đã hết hạn. Vui lòng gia hạn gói cước qua Ví MoMo để tiếp tục sử dụng hệ thống.'
+          requiresSubscription: true,
+          message: tenant.status === 'pending_payment' || tenant.plan === 'none'
+            ? 'Doanh nghiệp chưa kích hoạt gói cước. Bắt buộc phải mua gói dịch vụ mới có thể sử dụng hệ thống SmartOffice.'
+            : 'Gói cước dịch vụ của doanh nghiệp bạn đã hết hạn. Vui lòng gia hạn gói cước để tiếp tục sử dụng hệ thống.'
         });
       }
     }

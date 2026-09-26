@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { Search, Plus, Package, Wrench, CheckCircle2, AlertTriangle, Trash2, Edit, Loader2, X, Bell, LogOut, Building, Car, Laptop, UploadCloud, ImageIcon } from 'lucide-react';
 import { resourceService } from '../../services/resourceService';
 import apiClient from '../../services/apiClient';
@@ -214,22 +215,7 @@ export default function ResourceManagementPage() {
                             <Bell size={24} />
                         </button>
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Manager'}</p>
-                                <p className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">{user?.role || 'Manager'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm uppercase">
-                                {user?.name ? user.name.charAt(0) : 'M'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Manager" />
                     </div>
                 </header>
 

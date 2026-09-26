@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllTenants, updateTenantPlan, getMyTenantProfile, getRevenueAnalytics } = require('../controllers/tenantController');
+const { getAllTenants, updateTenantPlan, getMyTenantProfile, createTenant, getRevenueAnalytics } = require('../controllers/tenantController');
 const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware');
 
 /**
@@ -48,6 +48,7 @@ router.get('/analytics/revenue', verifyToken, authorizeRoles('super_admin'), get
  */
 router.get('/me', verifyToken, getMyTenantProfile);
 router.get('/', verifyToken, authorizeRoles('super_admin'), getAllTenants);
+router.post('/', verifyToken, authorizeRoles('super_admin'), createTenant);
 
 /**
  * @swagger

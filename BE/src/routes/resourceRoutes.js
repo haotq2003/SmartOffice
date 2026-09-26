@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const resourceController = require('../controllers/resourceController');
-const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware');
+const { verifyToken, authorizeRoles, checkSubscriptionStatus } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
@@ -57,7 +57,7 @@ const { verifyToken, authorizeRoles } = require('../middlewares/authMiddleware')
  *       403:
  *         description: Forbidden
  */
-router.get('/', verifyToken, authorizeRoles('admin', 'manager', 'employee'), resourceController.getAllResources);
+router.get('/', verifyToken, authorizeRoles('admin', 'manager', 'employee'), checkSubscriptionStatus, resourceController.getAllResources);
 
 /**
  * @swagger
@@ -81,7 +81,7 @@ router.get('/', verifyToken, authorizeRoles('admin', 'manager', 'employee'), res
  *       403:
  *         description: Forbidden
  */
-router.post('/', verifyToken, authorizeRoles('admin', 'manager'), resourceController.createResource);
+router.post('/', verifyToken, authorizeRoles('admin', 'manager'), checkSubscriptionStatus, resourceController.createResource);
 
 /**
  * @swagger
@@ -103,7 +103,7 @@ router.post('/', verifyToken, authorizeRoles('admin', 'manager'), resourceContro
  *       404:
  *         description: Resource not found
  */
-router.get('/:id', verifyToken, authorizeRoles('admin', 'manager', 'employee'), resourceController.getResourceById);
+router.get('/:id', verifyToken, authorizeRoles('admin', 'manager', 'employee'), checkSubscriptionStatus, resourceController.getResourceById);
 
 /**
  * @swagger
@@ -131,7 +131,7 @@ router.get('/:id', verifyToken, authorizeRoles('admin', 'manager', 'employee'), 
  *       404:
  *         description: Resource not found
  */
-router.put('/:id', verifyToken, authorizeRoles('admin', 'manager'), resourceController.updateResource);
+router.put('/:id', verifyToken, authorizeRoles('admin', 'manager'), checkSubscriptionStatus, resourceController.updateResource);
 
 /**
  * @swagger
@@ -153,6 +153,6 @@ router.put('/:id', verifyToken, authorizeRoles('admin', 'manager'), resourceCont
  *       404:
  *         description: Resource not found
  */
-router.delete('/:id', verifyToken, authorizeRoles('admin', 'manager'), resourceController.deleteResource);
+router.delete('/:id', verifyToken, authorizeRoles('admin', 'manager'), checkSubscriptionStatus, resourceController.deleteResource);
 
 module.exports = router;

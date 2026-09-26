@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { 
     BarChart3, 
     TrendingUp, 
@@ -67,22 +68,7 @@ export default function AnalyticsDashboardPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Tenant Admin'}</p>
-                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{user?.role || 'Tenant Admin'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm uppercase shadow-md shadow-blue-100">
-                                {user?.name ? user.name.charAt(0) : 'A'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Tenant Admin" />
                     </div>
                 </header>
 

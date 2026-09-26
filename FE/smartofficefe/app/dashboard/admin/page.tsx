@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
+import UserProfileHeader from '../../components/UserProfileHeader';
 import { Search, Users, Package, Calendar, ShieldCheck, UserPlus, Loader2, LogOut, ArrowRight, CheckCircle2, TrendingUp, Layers, PieChart, CreditCard, Sparkles, Check, Zap, Clock, Shield, X, AlertCircle, RefreshCw, Building } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { resourceService } from '../../services/resourceService';
@@ -160,6 +161,33 @@ export default function AdminDashboardPage() {
         }
     };
 
+    const handleVnPayPayment = async () => {
+        setIsSubmittingRenewal(true);
+        try {
+            const selectedPlan = availablePlans.find(p => p.code === selectedPlanCode);
+            const priceUSD = selectedPlan ? selectedPlan.price : (selectedPlanCode === 'enterprise' ? 199 : 49);
+
+            const res = await paymentService.createVnPayUrl({
+                planCode: selectedPlanCode,
+                priceUSD,
+                months: renewalMonths,
+                tenantId: user?.tenantId,
+            });
+
+            if (res.success && res.paymentUrl) {
+                window.location.href = res.paymentUrl;
+            } else {
+                alert('Khởi tạo giao dịch VNPay không thành công. Vui lòng thử lại!');
+                setIsSubmittingRenewal(false);
+            }
+        } catch (err: any) {
+            console.error('VNPay payment error:', err);
+            const backendMsg = err.response?.data?.message || err.message || 'Lỗi kết nối cổng thanh toán VNPay Sandbox.';
+            alert(`Khởi tạo thanh toán VNPay thất bại: ${backendMsg}`);
+            setIsSubmittingRenewal(false);
+        }
+    };
+
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -200,16 +228,25 @@ export default function AdminDashboardPage() {
             if (tenantRes && tenantRes.success && tenantRes.data) {
                 const tData = tenantRes.data;
                 const pDetail = tData.planDetails || {};
+                const isSub = tData.isSubscribed;
+                const code = tData.plan || pDetail.code || 'none';
+                const status = tData.status || 'pending_payment';
+                const daysRemaining = tData.daysRemaining !== undefined ? tData.daysRemaining : 0;
+
                 setCurrentPlan({
-                    code: tData.plan || pDetail.code || 'free',
-                    name: pDetail.name || (tData.plan === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : tData.plan === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Gói Trải Nghiệm (Free)'),
-                    price: pDetail.price !== undefined ? pDetail.price : (tData.plan === 'enterprise' ? 199 : tData.plan === 'premium' ? 49 : 0),
-                    maxUsers: pDetail.maxUsers !== undefined ? pDetail.maxUsers : (tData.plan === 'enterprise' ? -1 : tData.plan === 'premium' ? 100 : 20),
-                    maxResources: pDetail.maxResources !== undefined ? pDetail.maxResources : (tData.plan === 'enterprise' ? -1 : tData.plan === 'premium' ? 25 : 5),
-                    expiryDate: tData.expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-                    daysRemaining: tData.daysRemaining !== undefined ? tData.daysRemaining : 365,
-                    status: tData.status || 'active'
+                    code,
+                    name: pDetail.name || (code === 'enterprise' ? 'Gói Tập Đoàn (Enterprise)' : code === 'premium' ? 'Gói Chuyên Nghiệp (Premium)' : 'Chưa kích hoạt gói'),
+                    price: pDetail.price !== undefined ? pDetail.price : (code === 'enterprise' ? 199 : code === 'premium' ? 49 : 0),
+                    maxUsers: pDetail.maxUsers !== undefined ? pDetail.maxUsers : (code === 'enterprise' ? -1 : code === 'premium' ? 100 : 0),
+                    maxResources: pDetail.maxResources !== undefined ? pDetail.maxResources : (code === 'enterprise' ? -1 : code === 'premium' ? 25 : 0),
+                    expiryDate: tData.expiryDate || null,
+                    daysRemaining,
+                    status
                 });
+
+                if (!isSub || status !== 'active' || code === 'none' || daysRemaining <= 0) {
+                    setIsRenewalModalOpen(true);
+                }
             }
         } catch (err) {
             console.error('Error fetching admin dashboard data:', err);
@@ -228,6 +265,8 @@ export default function AdminDashboardPage() {
     const displayBookings = bookings;
     const pendingBookings = displayBookings.filter(b => b.status === 'pending').length;
     const approvedBookings = displayBookings.filter(b => b.status === 'approved' || b.status === 'checked_in' || b.status === 'confirmed').length;
+
+    const isUnsubscribed = currentPlan.code === 'none' || currentPlan.status !== 'active' || currentPlan.daysRemaining <= 0;
 
     return (
         <div className="flex bg-gray-50 min-h-screen font-sans">
@@ -250,22 +289,7 @@ export default function AdminDashboardPage() {
                     <div className="flex items-center gap-8">
                         <NotificationBell />
                         <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-3">
-                            <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{user?.name || 'Tenant Admin'}</p>
-                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">{user?.role || 'Tenant Admin'}</p>
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm uppercase shadow-md shadow-blue-100">
-                                {user?.name ? user.name.charAt(0) : 'A'}
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                title="Đăng xuất"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 cursor-pointer"
-                            >
-                                <LogOut size={18} />
-                            </button>
-                        </div>
+                        <UserProfileHeader user={user} defaultRole="Tenant Admin" />
                     </div>
                 </header>
 
@@ -276,8 +300,8 @@ export default function AdminDashboardPage() {
 
                     {/* Active Subscription Plan Banner Widget (Dynamic Expiration Warning) */}
                     <div className={`mb-8 border rounded-2xl p-6 shadow-sm transition-all relative overflow-hidden ${
-                        currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended'
-                            ? 'bg-rose-50/80 border-rose-200 text-rose-900 shadow-rose-100 ring-2 ring-rose-300 animate-pulse'
+                        isUnsubscribed
+                            ? 'bg-rose-50/80 border-rose-200 text-rose-900 shadow-rose-100 ring-2 ring-rose-300'
                             : 'bg-white border-blue-100/80'
                     }`}>
                         <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50/60 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10"></div>
@@ -286,16 +310,18 @@ export default function AdminDashboardPage() {
                             <div className="space-y-2 max-w-xl">
                                 <div className="flex items-center gap-2">
                                     <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border flex items-center gap-1.5 ${
-                                        currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended'
+                                        isUnsubscribed
                                             ? 'bg-rose-100 text-rose-700 border-rose-300'
                                             : 'bg-blue-50 text-blue-700 border-blue-100'
                                     }`}>
-                                        <CreditCard size={13} className={currentPlan.daysRemaining <= 0 ? 'text-rose-600' : 'text-blue-600'} />
-                                        Gói Cước Đang Sử Dụng
+                                        <CreditCard size={13} className={isUnsubscribed ? 'text-rose-600' : 'text-blue-600'} />
+                                        Gói Cước Doanh Nghiệp
                                     </span>
-                                    {currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended' ? (
+                                    {isUnsubscribed ? (
                                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-200 text-rose-800 border border-rose-300 flex items-center gap-1">
-                                            ⚠️ ĐÃ HẾT HẠN (TẠM KHÓA)
+                                            {currentPlan.code === 'none' || currentPlan.status === 'pending_payment'
+                                                ? '🔴 BẮT BUỘC MUA GÓI ĐỂ SỬ DỤNG'
+                                                : '⚠️ ĐÃ HẾT HẠN (TẠM KHÓA)'}
                                         </span>
                                     ) : (
                                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center gap-1">
@@ -305,12 +331,16 @@ export default function AdminDashboardPage() {
                                 </div>
                                 <h2 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
                                     {currentPlan.name}
-                                    <span className="text-xs font-semibold text-gray-500">(${currentPlan.price}/tháng)</span>
+                                    {currentPlan.price > 0 && (
+                                        <span className="text-xs font-semibold text-gray-500">(${currentPlan.price}/tháng)</span>
+                                    )}
                                 </h2>
                                 <p className="text-xs text-gray-600 leading-relaxed">
-                                    {currentPlan.daysRemaining <= 0 || currentPlan.status === 'suspended' ? (
+                                    {isUnsubscribed ? (
                                         <span className="font-bold text-rose-700">
-                                            🚨 Gói cước đã hết hạn vào ngày {currentPlan.expiryDate}. Các thao tác tạo dữ liệu mới bị tạm khóa. Vui lòng gia hạn ngay qua Ví MoMo để mở khóa!
+                                            {currentPlan.code === 'none' || currentPlan.status === 'pending_payment'
+                                                ? '🚨 Doanh nghiệp vừa tạo chưa có gói cước kích hoạt. Bạn bắt buộc phải mua gói dịch vụ để mở khóa hệ thống, tạo phòng họp và thêm nhân viên!'
+                                                : `🚨 Gói cước đã hết hạn vào ngày ${currentPlan.expiryDate}. Các thao tác tạo dữ liệu mới bị tạm khóa. Vui lòng gia hạn ngay để mở khóa!`}
                                         </span>
                                     ) : (
                                         <>Thời hạn gói đến ngày <span className="font-bold text-gray-800">{currentPlan.expiryDate}</span> (Còn <span className="font-bold text-blue-600">{currentPlan.daysRemaining} ngày</span>). Mở khóa toàn bộ tính năng Mô phỏng cửa quẹt thẻ, Thông báo tự động và Phê duyệt nhanh.</>
@@ -320,37 +350,15 @@ export default function AdminDashboardPage() {
 
                             {/* Limits & Action */}
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
-                                <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-3.5 min-w-[150px]">
-                                    <div className="flex justify-between text-xs mb-1 font-bold">
-                                        <span className="text-gray-500 text-[11px]">Nhân sự</span>
-                                        <span className="text-gray-900">{usersCount} / {currentPlan.maxUsers}</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full ${usersCount / currentPlan.maxUsers > 0.8 ? 'bg-amber-500' : 'bg-blue-600'}`}
-                                            style={{ width: `${Math.min(100, (usersCount / currentPlan.maxUsers) * 100)}%` }}
-                                        ></div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-3.5 min-w-[150px]">
-                                    <div className="flex justify-between text-xs mb-1 font-bold">
-                                        <span className="text-gray-500 text-[11px]">Tài nguyên</span>
-                                        <span className="text-gray-900">{resourcesCount} / {currentPlan.maxResources}</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full rounded-full ${resourcesCount / currentPlan.maxResources > 0.8 ? 'bg-purple-500' : 'bg-purple-600'}`}
-                                            style={{ width: `${Math.min(100, (resourcesCount / currentPlan.maxResources) * 100)}%` }}
-                                        ></div>
-                                    </div>
-                                </div>
-
                                 <button
                                     onClick={() => handleOpenRenewalModal()}
-                                    className="px-5 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-blue-100 flex items-center justify-center gap-2 border border-transparent whitespace-nowrap cursor-pointer shrink-0"
+                                    className={`px-6 py-3.5 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 border border-transparent whitespace-nowrap cursor-pointer shrink-0 ${
+                                        isUnsubscribed
+                                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200 animate-pulse'
+                                            : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'
+                                    }`}
                                 >
-                                    <RefreshCw size={15} /> Gia Hạn / Nâng Cấp Gói
+                                    <Zap size={16} /> {isUnsubscribed ? '⚡ Mua Gói Kích Hoạt Ngay' : 'Gia Hạn / Nâng Cấp Gói'}
                                 </button>
                             </div>
                         </div>
@@ -550,24 +558,47 @@ export default function AdminDashboardPage() {
                     </div>
                 </div>
 
-                {/* Renewal & Upgrade Modal */}
+                {/* Renewal & Mandatory Activation Modal */}
                 {isRenewalModalOpen && (
-                    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
                         <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-gray-100 relative max-h-[90vh] overflow-y-auto">
-                            <button
-                                onClick={() => setIsRenewalModalOpen(false)}
-                                className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
+                            {!isUnsubscribed && (
+                                <button
+                                    onClick={() => setIsRenewalModalOpen(false)}
+                                    className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                                >
+                                    <X size={20} />
+                                </button>
+                            )}
 
                             <div className="flex items-center gap-3 mb-2">
-                                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                                    <CreditCard size={20} />
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border shrink-0 ${
+                                    isUnsubscribed ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-blue-50 text-blue-600 border-blue-100'
+                                }`}>
+                                    {isUnsubscribed ? <Zap size={24} /> : <CreditCard size={24} />}
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900">Gia Hạn & Nâng Cấp Gói Cước SaaS</h2>
-                                    <p className="text-xs text-gray-500">Lựa chọn gói dịch vụ phù hợp với quy mô doanh nghiệp của bạn</p>
+                                    <div className="flex items-center gap-2">
+                                        <h2 className="text-xl font-black text-gray-900">
+                                            {currentPlan.code === 'none' || currentPlan.status === 'pending_payment'
+                                                ? 'Kích Hoạt Gói Doanh Nghiệp (Bắt buộc)'
+                                                : isUnsubscribed
+                                                    ? 'Gói Cước Đã Hết Hạn - Vui Lòng Gia Hạn'
+                                                    : 'Gia Hạn & Nâng Cấp Gói Cước SaaS'}
+                                        </h2>
+                                        {isUnsubscribed && (
+                                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200 uppercase tracking-wider">
+                                                Bắt buộc thanh toán
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                        {currentPlan.code === 'none' || currentPlan.status === 'pending_payment'
+                                            ? 'Doanh nghiệp vừa được tạo. Bạn bắt buộc phải mua gói dịch vụ để kích hoạt quyền quản trị, thêm nhân sự và đặt tài nguyên.'
+                                            : isUnsubscribed
+                                                ? 'Gói cước của doanh nghiệp bạn đã hết thời hạn sử dụng. Hãy chọn gói để mở khóa hệ thống.'
+                                                : 'Lựa chọn gói dịch vụ phù hợp với quy mô doanh nghiệp của bạn'}
+                                    </p>
                                 </div>
                             </div>
 
@@ -578,20 +609,34 @@ export default function AdminDashboardPage() {
                                     <p className="text-xs text-emerald-700 max-w-md mx-auto">{renewalSuccessMsg}</p>
                                 </div>
                             ) : (
-                                <form onSubmit={handleConfirmRenewal} className="mt-6 space-y-6">
+                                <div className="mt-6 space-y-6">
                                     {/* Plan Options */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {availablePlans.length === 0 ? (
-                                            <div className="col-span-3 p-8 text-center bg-gray-50 border border-gray-100 rounded-2xl">
-                                                <AlertCircle size={32} className="mx-auto text-amber-500 mb-2" />
-                                                <p className="font-bold text-gray-800 text-sm mb-1">Chưa có gói cước nào từ API Backend</p>
-                                                <p className="text-xs text-gray-500">Super Admin chưa tạo gói cước trong cơ sở dữ liệu. Hãy vào trang Quản lý Gói cước để thêm mới.</p>
-                                            </div>
-                                        ) : (
-                                            availablePlans.map((planItem) => {
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {(() => {
+                                            const paidPlans = availablePlans.filter(p => p.code !== 'free' && p.code !== 'none');
+                                            const plansToRender = paidPlans.length > 0 ? paidPlans : [
+                                                {
+                                                    _id: 'default-prem',
+                                                    name: 'Gói Chuyên Nghiệp (Premium)',
+                                                    code: 'premium',
+                                                    price: 49,
+                                                    maxUsers: 100,
+                                                    maxResources: 25,
+                                                    features: ['Tối đa 100 nhân viên', 'Tối đa 25 phòng & thiết bị', 'Mô phỏng quẹt cửa Smart Lock', 'Báo cáo & Phân quyền quản lý']
+                                                },
+                                                {
+                                                    _id: 'default-ent',
+                                                    name: 'Gói Tập Đoàn (Enterprise)',
+                                                    code: 'enterprise',
+                                                    price: 199,
+                                                    maxUsers: -1,
+                                                    maxResources: -1,
+                                                    features: ['Không giới hạn nhân viên', 'Không giới hạn tài nguyên', 'Tích hợp IoT nâng cao', 'Hỗ trợ kỹ thuật 24/7 & SLA 99.9%']
+                                                }
+                                            ];
+
+                                            return plansToRender.map((planItem) => {
                                                 const isSelected = selectedPlanCode === planItem.code;
-                                                const isCurrent = currentPlan.code === planItem.code;
-                                                const isPremium = planItem.code === 'premium';
                                                 const isEnterprise = planItem.code === 'enterprise';
 
                                                 return (
@@ -600,27 +645,34 @@ export default function AdminDashboardPage() {
                                                         onClick={() => setSelectedPlanCode(planItem.code)}
                                                         className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between relative ${isSelected
                                                                 ? isEnterprise
-                                                                    ? 'border-purple-600 bg-purple-50/30 shadow-md'
-                                                                    : 'border-blue-600 bg-blue-50/40 shadow-md'
-                                                                : 'border-gray-100 hover:border-gray-200'
+                                                                    ? 'border-purple-600 bg-purple-50/40 shadow-md ring-2 ring-purple-200'
+                                                                    : 'border-blue-600 bg-blue-50/50 shadow-md ring-2 ring-blue-200'
+                                                                : 'border-gray-100 hover:border-gray-200 bg-white'
                                                             }`}
                                                     >
-                                                        {isPremium && (
-                                                            <div className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                        {planItem.code === 'premium' && (
+                                                            <div className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
                                                                 Phổ biến nhất
                                                             </div>
                                                         )}
+                                                        {isEnterprise && (
+                                                            <div className="absolute -top-3 right-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                                                                Toàn diện
+                                                            </div>
+                                                        )}
                                                         <div>
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className={`text-xs font-bold uppercase ${isEnterprise ? 'text-purple-600' : isPremium ? 'text-blue-600' : 'text-gray-500'}`}>
+                                                            <div className="flex justify-between items-center mb-1">
+                                                                <span className={`text-xs font-black uppercase tracking-wider ${isEnterprise ? 'text-purple-600' : 'text-blue-600'}`}>
                                                                     {planItem.code}
                                                                 </span>
-                                                                {isCurrent && (
-                                                                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Hiện tại</span>
+                                                                {isSelected && (
+                                                                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                                        <Check size={12} /> Đang chọn
+                                                                    </span>
                                                                 )}
                                                             </div>
-                                                            <h4 className="font-bold text-gray-900 text-base mb-1">{planItem.name}</h4>
-                                                            <p className={`text-xl font-extrabold mb-3 ${isEnterprise ? 'text-purple-600' : isPremium ? 'text-blue-600' : 'text-gray-900'}`}>
+                                                            <h4 className="font-extrabold text-gray-900 text-base mb-1">{planItem.name}</h4>
+                                                            <p className={`text-2xl font-black mb-3 ${isEnterprise ? 'text-purple-600' : 'text-blue-600'}`}>
                                                                 ${planItem.price} <span className="text-xs font-normal text-gray-400">/ tháng</span>
                                                             </p>
                                                             <ul className="text-xs space-y-2 text-gray-600 mb-4">
@@ -647,24 +699,24 @@ export default function AdminDashboardPage() {
                                                         </div>
                                                     </div>
                                                 );
-                                            })
-                                        )}
+                                            });
+                                        })()}
                                     </div>
 
                                     {/* Duration selection */}
                                     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
                                         <div>
-                                            <p className="text-xs font-bold text-gray-900">Thời hạn gia hạn gói:</p>
-                                            <p className="text-[11px] text-gray-500">Thanh toán 12 tháng giảm thêm 15% tổng chi phí hợp đồng.</p>
+                                            <p className="text-xs font-bold text-gray-900">Thời hạn đăng ký gói:</p>
+                                            <p className="text-[11px] text-gray-500">Thanh toán 12 tháng được chiết khấu thêm 15% tổng chi phí.</p>
                                         </div>
                                         <div className="flex gap-2">
-                                            {[3, 6, 12].map((m) => (
+                                            {[1, 3, 6, 12].map((m) => (
                                                 <button
                                                     key={m}
                                                     type="button"
                                                     onClick={() => setRenewalMonths(m)}
                                                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${renewalMonths === m
-                                                            ? 'bg-blue-600 text-white shadow-sm'
+                                                            ? 'bg-gray-900 text-white shadow-sm'
                                                             : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
                                                         }`}
                                                 >
@@ -674,46 +726,92 @@ export default function AdminDashboardPage() {
                                         </div>
                                     </div>
 
-                                    {/* Payment & Contact Info Note */}
-                                    <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-start gap-3">
-                                        <Building className="text-blue-600 shrink-0 mt-0.5" size={18} />
-                                        <div className="text-xs text-blue-900 space-y-1">
-                                            <p className="font-bold">Phương thức Thanh toán & Kích hoạt Tự Động:</p>
-                                            <p className="text-blue-700 leading-relaxed">
-                                                Hệ thống hỗ trợ thanh toán trực tuyến chính thức qua cổng thanh toán Ví & Thẻ ATM MoMo Sandbox.
-                                            </p>
+                                    {/* Price calculation summary */}
+                                    {(() => {
+                                        const curPlanPrice = selectedPlanCode === 'enterprise' ? 199 : 49;
+                                        const rawUSD = curPlanPrice * renewalMonths;
+                                        const calcUSD = renewalMonths === 12 ? Math.round(rawUSD * 0.85) : rawUSD;
+                                        const calcVND = (calcUSD * 25400).toLocaleString('vi-VN');
+
+                                        return (
+                                            <div className="p-4 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border border-blue-100 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-3">
+                                                <div>
+                                                    <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Tổng Chi Phí Kích Hoạt</span>
+                                                    <div className="text-2xl font-black text-gray-900">
+                                                        ${calcUSD} USD <span className="text-sm font-semibold text-gray-500">(~{calcVND} VNĐ)</span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right text-xs text-blue-700">
+                                                    <div>Gói: <span className="font-bold">{selectedPlanCode === 'enterprise' ? 'Enterprise' : 'Premium'}</span></div>
+                                                    <div>Kỳ hạn: <span className="font-bold">{renewalMonths} tháng</span> {renewalMonths === 12 && <span className="text-emerald-600 font-bold">(Đã giảm 15%)</span>}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Action Buttons: MoMo & VNPay */}
+                                    <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-3">
+                                        {isUnsubscribed ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleLogout}
+                                                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                                            >
+                                                <LogOut size={14} /> Đăng xuất
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsRenewalModalOpen(false)}
+                                                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                                            >
+                                                Hủy
+                                            </button>
+                                        )}
+
+                                        <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
+                                            {/* VNPay Button */}
+                                            <button
+                                                type="button"
+                                                onClick={handleVnPayPayment}
+                                                disabled={isSubmittingRenewal}
+                                                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                            >
+                                                {isSubmittingRenewal ? (
+                                                    <>
+                                                        <Loader2 size={16} className="animate-spin" />
+                                                        <span>Đang chuyển VNPay...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Zap size={15} />
+                                                        <span>Thanh Toán VNPay Sandbox</span>
+                                                    </>
+                                                )}
+                                            </button>
+
+                                            {/* MoMo Button */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMomoPayment()}
+                                                disabled={isSubmittingRenewal}
+                                                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-pink-100 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                                            >
+                                                {isSubmittingRenewal ? (
+                                                    <>
+                                                        <Loader2 size={16} className="animate-spin" />
+                                                        <span>Đang chuyển MoMo...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <CreditCard size={15} />
+                                                        <span>Thanh Toán Ví MoMo Sandbox</span>
+                                                    </>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
-
-                                    {/* Footer Actions */}
-                                    <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2 border-t border-gray-100">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsRenewalModalOpen(false)}
-                                            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
-                                        >
-                                            Hủy
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleMomoPayment()}
-                                            disabled={isSubmittingRenewal}
-                                            className="px-6 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs rounded-xl transition-all shadow-md shadow-pink-100 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                                        >
-                                            {isSubmittingRenewal ? (
-                                                <>
-                                                    <Loader2 size={16} className="animate-spin" />
-                                                    <span>Đang chuyển MoMo ATM...</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <CreditCard size={16} />
-                                                    <span>Thanh Toán Thẻ ATM (MoMo Sandbox)</span>
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </form>
+                                </div>
                             )}
                         </div>
                     </div>
