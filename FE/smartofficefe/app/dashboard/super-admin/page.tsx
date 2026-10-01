@@ -20,7 +20,6 @@ import {
     Unlock,
     Sparkles,
     Download,
-    KeyRound,
     X,
     Server,
     Check,
@@ -29,6 +28,7 @@ import {
 import apiClient from '../../services/apiClient';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface TenantData {
     _id: string;
@@ -219,12 +219,6 @@ export default function SuperAdminDashboardPage() {
 
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={() => router.push('/door-simulator')}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-bold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
-                            >
-                                <KeyRound size={16} className="text-amber-500" /> Mô Phỏng Quẹt Cửa
-                            </button>
-                            <button
                                 onClick={() => setIsAddModalOpen(true)}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-red-100 cursor-pointer"
                             >
@@ -257,18 +251,24 @@ export default function SuperAdminDashboardPage() {
                             </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <Link 
+                            href="/dashboard/super-admin/users"
+                            className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md hover:border-purple-200 transition-all group cursor-pointer"
+                        >
                             <div className="flex items-center justify-between mb-3">
                                 <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Tổng User Toàn Sàn</span>
-                                <span className="p-2 rounded-xl bg-purple-50 text-purple-600">
+                                <span className="p-2 rounded-xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                                     <Users size={20} />
                                 </span>
                             </div>
                             <div>
                                 <h3 className="text-3xl font-extrabold text-gray-900 mb-1">{totalUsersSum.toLocaleString()} users</h3>
-                                <p className="text-xs text-gray-400">Tài khoản Admin, Manager & Employee</p>
+                                <p className="text-xs text-purple-600 font-medium flex items-center justify-between">
+                                    <span>Tài khoản toàn hệ thống</span>
+                                    <span className="text-[11px] group-hover:translate-x-1 transition-transform">Quản lý &rarr;</span>
+                                </p>
                             </div>
-                        </div>
+                        </Link>
 
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between mb-3">

@@ -52,11 +52,10 @@ export default function Sidebar({ activeTab }: SidebarProps) {
 
     // 1. Super Admin Menu (Platform Level)
     const superAdminMenuItems = [
-        { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard Platform', path: '/dashboard' },
-        { id: 'tenants', icon: Building2, label: 'Doanh Nghiệp Thuê', path: '/dashboard' },
+        { id: 'dashboard', icon: Building2, label: 'Quản Lý Doanh Nghiệp', path: '/dashboard' },
+        { id: 'super-admin-users', icon: User2, label: 'Quản Lý Tất Cả Tài Khoản', path: '/dashboard/super-admin/users' },
         { id: 'plans', icon: CreditCard, label: 'Quản Lý Gói Cước', path: '/dashboard/plans' },
         { id: 'revenue', icon: DollarSign, label: 'Doanh Thu Platform', path: '/dashboard/revenue' },
-        { id: 'door-simulator', icon: KeyRound, label: 'Mô Phỏng Quẹt Cửa', path: '/door-simulator' },
     ];
 
     // 2. Tenant Admin Menu (Enterprise Level)

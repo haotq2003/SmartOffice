@@ -491,12 +491,13 @@ export default function AdminDashboardPage() {
                                                                     }`}
                                                             >
                                                                 {
-                                                                    b.status === 'approved' ? 'Đã duyệt' :
-                                                                        b.status === 'checked_in' ? 'Đã giao' :
+                                                                    b.status === 'approved' ? (resourceObj?.type === 'room' ? 'Đã duyệt (Chờ Check-in)' : 'Đã duyệt') :
+                                                                        b.status === 'checked_in' ? (resourceObj?.type === 'room' ? '🟢 Đã Check-in' : 'Đã giao') :
                                                                             b.status === 'returned' ? 'Đã trả' :
-                                                                                b.status === 'rejected' ? 'Từ chối' :
-                                                                                    b.status === 'confirmed' ? 'Xác nhận' :
-                                                                                        b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
+                                                                                b.status === 'no_show' ? (resourceObj?.type === 'room' ? '🔴 Hủy do quá hạn Check-in' : 'Không lấy') :
+                                                                                    b.status === 'rejected' ? 'Từ chối' :
+                                                                                        b.status === 'confirmed' ? 'Xác nhận' :
+                                                                                            b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
                                                                 }
                                                             </span>
                                                         </td>

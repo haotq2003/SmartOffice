@@ -8,6 +8,9 @@ export interface UserInfo {
   role: string;
   tenantId: string;
   companyName?: string;
+  rfidCardId?: string;
+  violationCount?: number;
+  bookingBannedUntil?: string | null;
   tenant?: {
     _id: string;
     name: string;

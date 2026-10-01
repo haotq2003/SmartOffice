@@ -1,5 +1,16 @@
 const express = require('express');
-const { registerTenant, login, getMe, createUser, getUsers } = require('../controllers/authController');
+const {
+  registerTenant,
+  login,
+  getMe,
+  createUser,
+  getUsers,
+  getAllSystemUsers,
+  createSystemUser,
+  updateSystemUser,
+  resetUserPassword,
+  deleteSystemUser,
+} = require('../controllers/authController');
 const { verifyToken, authorizeRoles, checkSubscriptionStatus } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
@@ -142,5 +153,12 @@ router.post('/create-user', verifyToken, authorizeRoles('admin'), checkSubscript
  *         description: Server error
  */
 router.get('/users', verifyToken, authorizeRoles('admin', 'manager'), getUsers);
+
+// Super Admin: System-wide User Management
+router.get('/system-users', verifyToken, authorizeRoles('super_admin'), getAllSystemUsers);
+router.post('/system-users', verifyToken, authorizeRoles('super_admin'), createSystemUser);
+router.patch('/system-users/:id', verifyToken, authorizeRoles('super_admin'), updateSystemUser);
+router.patch('/system-users/:id/reset-password', verifyToken, authorizeRoles('super_admin'), resetUserPassword);
+router.delete('/system-users/:id', verifyToken, authorizeRoles('super_admin'), deleteSystemUser);
 
 module.exports = router;

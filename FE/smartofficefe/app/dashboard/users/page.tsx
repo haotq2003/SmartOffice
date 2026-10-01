@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import UserProfileHeader from '../../components/UserProfileHeader';
-import { Search, UserPlus, Shield, UserCheck, Mail, Lock, Loader2, X, Bell, LogOut, Building2 } from 'lucide-react';
+import { Search, UserPlus, Shield, UserCheck, Mail, Lock, Loader2, X, Bell, LogOut, Building2, CreditCard } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ interface UserData {
     email: string;
     role: 'admin' | 'manager' | 'employee' | 'super_admin';
     tenantId?: any;
+    rfidCardId?: string;
     createdAt?: string;
 }
 
@@ -38,6 +39,7 @@ export default function UsersPage() {
         email: '',
         password: '',
         role: 'employee' as 'manager' | 'employee',
+        rfidCardId: '',
     });
 
     useEffect(() => {
@@ -81,7 +83,7 @@ export default function UsersPage() {
             const res = await authService.createUser(formData);
             if (res.success) {
                 setSuccessMsg('Tạo tài khoản thành công!');
-                setFormData({ name: '', email: '', password: '', role: 'employee' });
+                setFormData({ name: '', email: '', password: '', role: 'employee', rfidCardId: '' });
                 setIsModalOpen(false);
                 fetchUsers();
             }
@@ -232,6 +234,7 @@ export default function UsersPage() {
                                     <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase text-gray-400 tracking-wider">
                                         <th className="py-4 px-6">Nhân sự</th>
                                         <th className="py-4 px-6">Email</th>
+                                        <th className="py-4 px-6">Mã thẻ RFID</th>
                                         <th className="py-4 px-6">Doanh nghiệp</th>
                                         <th className="py-4 px-6">Vai trò</th>
                                         <th className="py-4 px-6">Ngày tham gia</th>
@@ -247,6 +250,15 @@ export default function UsersPage() {
                                                 <span className="font-semibold text-gray-900">{user.name}</span>
                                             </td>
                                             <td className="py-4 px-6 text-gray-600">{user.email}</td>
+                                            <td className="py-4 px-6 font-mono text-xs">
+                                                {user.rfidCardId ? (
+                                                    <span className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 font-semibold inline-flex items-center gap-1">
+                                                        <CreditCard size={11} /> {user.rfidCardId}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400">Chưa cấp</span>
+                                                )}
+                                            </td>
                                             <td className="py-4 px-6 text-gray-700 text-xs font-semibold">
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/70 text-slate-700">
                                                     <Building2 size={12} className="text-blue-600 shrink-0" />
@@ -345,6 +357,23 @@ export default function UsersPage() {
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                         className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:bg-white focus:border-blue-600 outline-none transition-all"
                                         required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-bold text-gray-700">Mã thẻ RFID</label>
+                                    <span className="text-[11px] text-gray-400">Để trống sẽ tự động cấp mã</span>
+                                </div>
+                                <div className="relative">
+                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Ví dụ: RFID-1005 (Tùy chọn)"
+                                        value={formData.rfidCardId}
+                                        onChange={(e) => setFormData({ ...formData, rfidCardId: e.target.value })}
+                                        className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:bg-white focus:border-blue-600 outline-none transition-all font-mono"
                                     />
                                 </div>
                             </div>

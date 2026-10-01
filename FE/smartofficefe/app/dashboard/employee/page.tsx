@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
 import UserProfileHeader from '../../components/UserProfileHeader';
-import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Plus, Loader2, X, Bell, LogOut, Package } from 'lucide-react';
+import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Plus, Loader2, X, Bell, LogOut, Package, Car } from 'lucide-react';
 import { resourceService } from '../../services/resourceService';
 import { bookingService } from '../../services/bookingService';
 import { Resource, Booking, AvailabilitySlot } from '../../types/api';
@@ -19,7 +19,7 @@ export default function EmployeeDashboardPage() {
     const [loadingResources, setLoadingResources] = useState(true);
     const [loadingBookings, setLoadingBookings] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedType, setSelectedType] = useState<'all' | 'room' | 'equipment'>('all');
+    const [selectedType, setSelectedType] = useState<'all' | 'room' | 'equipment' | 'vehicle'>('all');
 
     const filteredResources = resources.filter((r) => {
         const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -121,8 +121,14 @@ export default function EmployeeDashboardPage() {
         const day = String(now.getDate()).padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
 
-        setStartTime(`${todayStr}T09:00`);
-        setEndTime(`${todayStr}T10:00`);
+        const curHour = now.getHours();
+        const startHour = curHour < 8 ? 8 : (curHour >= 17 ? 8 : curHour + 1);
+        const endHour = Math.min(17, startHour + 1);
+        const startHourStr = String(startHour).padStart(2, '0');
+        const endHourStr = String(endHour).padStart(2, '0');
+
+        setStartTime(`${todayStr}T${startHourStr}:00`);
+        setEndTime(`${todayStr}T${endHourStr}:00`);
         setBorrowDate(todayStr);
         setReturnDate(todayStr);
         setNotes('');
@@ -162,7 +168,18 @@ export default function EmployeeDashboardPage() {
                 setErrorMsg('Ngày trả không được nhỏ hơn ngày mượn.');
                 return;
             }
-            startISO = new Date(`${borrowDate}T00:00:00.000`).toISOString();
+            const now = new Date();
+            const borrowDateObj = new Date(`${borrowDate}T00:00:00`);
+            const todayDateObj = new Date();
+            todayDateObj.setHours(0, 0, 0, 0);
+
+            if (borrowDateObj < todayDateObj) {
+                setErrorMsg('Không thể chọn ngày mượn trong quá khứ.');
+                return;
+            }
+
+            const isToday = borrowDateObj.toDateString() === now.toDateString();
+            startISO = isToday ? now.toISOString() : new Date(`${borrowDate}T08:00:00.000`).toISOString();
             endISO = new Date(`${returnDate}T23:59:59.999`).toISOString();
 
             // Client-side check: prevent borrowing the same equipment twice in overlapping period
@@ -196,7 +213,7 @@ export default function EmployeeDashboardPage() {
 
         setIsSubmitting(true);
         try {
-            const attendeesList = selectedResource.type === 'room'
+            const attendeesList = selectedResource.type !== 'equipment'
                 ? attendeesText.split(',').map(item => item.trim()).filter(item => item.length > 0)
                 : [];
 
@@ -214,7 +231,7 @@ export default function EmployeeDashboardPage() {
             });
 
             if (res.success) {
-                setSuccessMsg(selectedResource.type === 'room' ? 'Gửi yêu cầu đặt phòng họp thành công!' : 'Gửi yêu cầu mượn thiết bị thành công!');
+                setSuccessMsg(selectedResource.type === 'room' ? 'Gửi yêu cầu đặt phòng họp thành công!' : selectedResource.type === 'vehicle' ? 'Gửi yêu cầu đăng ký xe công tác thành công!' : 'Gửi yêu cầu mượn thiết bị thành công!');
                 setIsModalOpen(false);
                 fetchMyBookings();
             }
@@ -310,6 +327,7 @@ export default function EmployeeDashboardPage() {
                         {[
                             { id: 'all', label: `Tất cả (${resources.length})` },
                             { id: 'room', label: `Phòng họp (${resources.filter(r => r.type === 'room').length})` },
+                            { id: 'vehicle', label: `Xe công tác (${resources.filter(r => r.type === 'vehicle').length})` },
                             { id: 'equipment', label: `Thiết bị (${resources.filter(r => r.type === 'equipment').length})` }
                         ].map((tab) => (
                             <button
@@ -392,6 +410,8 @@ export default function EmployeeDashboardPage() {
                                                     <span>{res.location || (res.type === 'equipment' ? 'Phòng thiết bị' : 'Văn phòng chính')}</span>
                                                     {res.type === 'room' ? (
                                                         <span className="font-semibold text-blue-600">Sức chứa: {res.capacity || 1} người</span>
+                                                    ) : res.type === 'vehicle' ? (
+                                                        <span className="font-semibold text-purple-600">Sức chứa: {res.capacity || 4} chỗ ngồi</span>
                                                     ) : (
                                                         <span className="font-semibold text-emerald-600">Số lượng: {res.quantity || 1} cái</span>
                                                     )}
@@ -412,10 +432,13 @@ export default function EmployeeDashboardPage() {
                                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                                         : res.type === 'room'
                                                             ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
-                                                            : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
+                                                            : res.type === 'vehicle'
+                                                                ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-purple-100'
+                                                                : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100'
                                                     }`}
                                             >
-                                                <Plus size={16} /> {res.type === 'room' ? 'Đặt phòng họp' : 'Mượn thiết bị'}
+                                                {res.type === 'vehicle' ? <Car size={16} /> : <Plus size={16} />}
+                                                {res.type === 'room' ? 'Đặt phòng họp' : res.type === 'vehicle' ? 'Đăng ký xe' : 'Mượn thiết bị'}
                                             </button>
                                         </div>
                                     </div>
@@ -437,14 +460,18 @@ export default function EmployeeDashboardPage() {
                             <X size={20} />
                         </button>
 
-                        {/* Dynamic Header based on Room vs Equipment */}
+                        {/* Dynamic Header based on Room vs Vehicle vs Equipment */}
                         <div className="flex items-center gap-3 mb-4">
-                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${selectedResource.type === 'room' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                <Package size={22} />
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                                selectedResource.type === 'room' ? 'bg-blue-50 text-blue-600' :
+                                selectedResource.type === 'vehicle' ? 'bg-purple-50 text-purple-600' :
+                                'bg-emerald-50 text-emerald-600'
+                            }`}>
+                                {selectedResource.type === 'vehicle' ? <Car size={22} /> : <Package size={22} />}
                             </div>
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900">
-                                    {selectedResource.type === 'room' ? 'Đặt phòng họp' : 'Yêu cầu mượn thiết bị'}
+                                    {selectedResource.type === 'room' ? 'Đặt phòng họp' : selectedResource.type === 'vehicle' ? 'Đăng ký xe công tác' : 'Yêu cầu mượn thiết bị'}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-0.5">
                                     <span className="text-xs font-semibold text-gray-700">{selectedResource.name}</span>
@@ -454,6 +481,19 @@ export default function EmployeeDashboardPage() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Vehicle Notice */}
+                        {selectedResource.type === 'vehicle' && (
+                            <div className="mb-4 p-3.5 bg-purple-50/80 border border-purple-200/80 rounded-xl text-xs text-purple-900 flex items-start gap-2.5">
+                                <Car size={18} className="text-purple-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-bold">Quy trình điều xe công tác:</p>
+                                    <p className="text-[11px] text-purple-700 mt-0.5">
+                                        Đơn đặt xe cần Quản lý (Manager) phê duyệt. Sau khi duyệt, vui lòng liên hệ Ban Quản lý tại <span className="font-bold">{selectedResource.location || 'Bãi xe'}</span> để nhận bàn giao xe và chìa khóa.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Equipment Notice */}
                         {selectedResource.type === 'equipment' && (
@@ -520,7 +560,7 @@ export default function EmployeeDashboardPage() {
                                                         {sTime} - {eTime}
                                                     </span>
                                                     <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">
-                                                        {slot.status === 'checked_in' ? 'Đã giao thiết bị' : slot.status === 'approved' ? 'Đã duyệt' : 'Đang chờ duyệt'}
+                                                        {slot.status === 'checked_in' ? (selectedResource?.type === 'room' ? '🟢 Đang họp' : 'Đã giao thiết bị') : slot.status === 'approved' ? (selectedResource?.type === 'room' ? 'Đã duyệt (Chờ Check-in)' : 'Đã duyệt') : 'Đang chờ duyệt'}
                                                     </span>
                                                 </div>
                                             );
@@ -578,7 +618,9 @@ export default function EmployeeDashboardPage() {
                             ) : (
                                 <>
                                     <div>
-                                        <label className="text-xs font-bold text-gray-700 block mb-1">Thời gian bắt đầu (08:00 - 17:30)</label>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">
+                                            {selectedResource.type === 'vehicle' ? 'Thời gian khởi hành' : 'Thời gian bắt đầu (08:00 - 17:30)'}
+                                        </label>
                                         <input
                                             type="datetime-local"
                                             value={startTime}
@@ -589,7 +631,9 @@ export default function EmployeeDashboardPage() {
                                     </div>
 
                                     <div>
-                                        <label className="text-xs font-bold text-gray-700 block mb-1">Thời gian kết thúc</label>
+                                        <label className="text-xs font-bold text-gray-700 block mb-1">
+                                            {selectedResource.type === 'vehicle' ? 'Thời gian về (dự kiến)' : 'Thời gian kết thúc'}
+                                        </label>
                                         <input
                                             type="datetime-local"
                                             value={endTime}
@@ -603,11 +647,17 @@ export default function EmployeeDashboardPage() {
 
                             <div>
                                 <label className="text-xs font-bold text-gray-700 block mb-1">
-                                    {selectedResource.type === 'equipment' ? 'Địa điểm & Mục đích sử dụng' : 'Mục đích / Ghi chú cuộc họp'}
+                                    {selectedResource.type === 'equipment' ? 'Địa điểm & Mục đích sử dụng' : selectedResource.type === 'vehicle' ? 'Lộ trình & Mục đích chuyến đi' : 'Mục đích / Ghi chú cuộc họp'}
                                 </label>
                                 <textarea
                                     rows={3}
-                                    placeholder={selectedResource.type === 'equipment' ? "Ví dụ: Dùng tại Sảnh tầng 1 cho sự kiện workshop Marketing..." : "Ví dụ: Họp báo cáo kiến trúc dự án Phoenix với 5 thành viên..."}
+                                    placeholder={
+                                        selectedResource.type === 'equipment' 
+                                            ? "Ví dụ: Dùng tại Sảnh tầng 1 cho sự kiện workshop Marketing..." 
+                                            : selectedResource.type === 'vehicle'
+                                                ? "Ví dụ: Đi công tác gặp khách hàng và khảo sát nhà máy tại KCN Quế Võ, Bắc Ninh..."
+                                                : "Ví dụ: Họp báo cáo kiến trúc dự án Phoenix với 5 thành viên..."
+                                    }
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                     className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl p-3 focus:bg-white focus:border-blue-600 outline-none transition-all"

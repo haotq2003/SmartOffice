@@ -7,6 +7,8 @@ const User = require('./models/User');
 const Resource = require('./models/Resource');
 const Booking = require('./models/Booking');
 const Notification = require('./models/Notification');
+const Plan = require('./models/Plan');
+const Transaction = require('./models/Transaction');
 
 const seedDB = async () => {
   try {
@@ -20,23 +22,59 @@ const seedDB = async () => {
     await Resource.deleteMany({});
     await Booking.deleteMany({});
     await Notification.deleteMany({});
+    await Plan.deleteMany({});
+    await Transaction.deleteMany({});
+
+    console.log('Creating standard Plans...');
+    await Plan.create([
+      {
+        name: 'Gói Trải Nghiệm (Free)',
+        code: 'free',
+        price: 0,
+        maxUsers: 20,
+        maxResources: 5,
+        features: ['Quản lý tối đa 20 nhân sự', '5 tài nguyên phòng & thiết bị', 'Đặt lịch phòng họp cơ bản'],
+        description: 'Dành cho các nhóm khởi nghiệp hoặc doanh nghiệp nhỏ trải nghiệm nền tảng.'
+      },
+      {
+        name: 'Gói Chuyên Nghiệp (Premium)',
+        code: 'premium',
+        price: 49,
+        maxUsers: 100,
+        maxResources: 25,
+        features: ['Tối đa 100 nhân sự', '25 tài nguyên phòng & thiết bị', 'Mô phỏng quẹt cửa Smart Lock', 'Báo cáo thống kê chi tiết'],
+        description: 'Gói cước tối ưu cho các doanh nghiệp đang mở rộng quy mô văn phòng.'
+      },
+      {
+        name: 'Gói Tập Đoàn (Enterprise)',
+        code: 'enterprise',
+        price: 199,
+        maxUsers: -1,
+        maxResources: -1,
+        features: ['Không giới hạn nhân sự & tài nguyên', 'Đầy đủ tính năng cao cấp', 'Hỗ trợ ưu tiên 24/7'],
+        description: 'Giải pháp toàn diện không giới hạn cho các tập đoàn lớn.'
+      }
+    ]);
 
     console.log('Creating initial Tenant...');
     const defaultTenant = await Tenant.create({
       name: 'SmartOffice Corporation',
       domain: 'smartoffice.com',
-      plan: 'enterprise'
+      plan: 'enterprise',
+      status: 'active',
+      planExpiredAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     });
 
     console.log('Hashing passwords...');
     const salt = await bcrypt.genSalt(10);
     const defaultPassword = await bcrypt.hash('123456', salt);
+    const superAdminPassword = await bcrypt.hash('superadmin123', salt);
 
     console.log('Creating initial Users...');
     const superAdmin = await User.create({
       name: 'Super Admin System',
       email: 'superadmin@smartoffice.com',
-      password: defaultPassword,
+      password: superAdminPassword,
       role: 'super_admin',
       rfidCardId: 'RFID-1001'
     });
@@ -202,6 +240,34 @@ const seedDB = async () => {
         status: 'available',
         isAutoApprove: false,
         images: ['https://images.unsplash.com/photo-1590602847861-f357a9332bbc?auto=format&fit=crop&w=800&q=80']
+      }
+    ]);
+
+    console.log('Creating Corporate Vehicles (Auto-approve = FALSE)...');
+    await Resource.create([
+      {
+        tenantId: defaultTenant._id,
+        name: 'Xe 7 chỗ Toyota Fortuner (Biển số 29A-888.68)',
+        type: 'vehicle',
+        capacity: 7,
+        quantity: 1,
+        location: 'Hầm B2 - Vị trí C05',
+        description: 'Xe SUV phục vụ đưa đón lãnh đạo, chuyên gia và các chuyến công tác ngoại tỉnh. Đã trang bị camera hành trình và thẻ ETC.',
+        status: 'available',
+        isAutoApprove: false,
+        images: ['https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80']
+      },
+      {
+        tenantId: defaultTenant._id,
+        name: 'Xe 16 chỗ Ford Transit (Biển số 29B-123.45)',
+        type: 'vehicle',
+        capacity: 16,
+        quantity: 1,
+        location: 'Bãi xe ngoài trời Tòa nhà A',
+        description: 'Phục vụ teambuilding, đưa đón nhân viên sự kiện, các chuyến đào tạo tập trung.',
+        status: 'available',
+        isAutoApprove: false,
+        images: ['https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80']
       }
     ]);
 

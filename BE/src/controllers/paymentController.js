@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const querystring = require('querystring');
+const qs = require('qs');
 const Tenant = require('../models/Tenant');
 const Plan = require('../models/Plan');
 const Transaction = require('../models/Transaction');
@@ -50,6 +50,11 @@ const createPaymentUrl = async (req, res) => {
         const locale = 'vn';
         const currCode = 'VND';
 
+        let ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        if (typeof ipAddr === 'string' && (ipAddr.includes(':') || ipAddr === '::1')) {
+            ipAddr = '127.0.0.1';
+        }
+
         let vnp_Params = {};
         vnp_Params['vnp_Version'] = '2.1.0';
         vnp_Params['vnp_Command'] = 'pay';
@@ -61,20 +66,21 @@ const createPaymentUrl = async (req, res) => {
         vnp_Params['vnp_OrderType'] = orderType;
         vnp_Params['vnp_Amount'] = amountVND * 100; // VNPay requires amount * 100
         vnp_Params['vnp_ReturnUrl'] = VNP_RETURNURL;
-        vnp_Params['vnp_IpAddr'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        vnp_Params['vnp_IpAddr'] = ipAddr;
+        vnp_Params['vnp_CreateDate'] = createDate;
         if (req.body.bankCode) {
             vnp_Params['vnp_BankCode'] = req.body.bankCode;
         }
 
         vnp_Params = sortObject(vnp_Params);
 
-        const signData = querystring.stringify(vnp_Params, { encode: false });
+        const signData = qs.stringify(vnp_Params, { encode: false });
         const hmac = crypto.createHmac('sha512', VNP_HASHSECRET);
         const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
         vnp_Params['vnp_SecureHash'] = signed;
 
-        const paymentUrl = VNP_URL + '?' + querystring.stringify(vnp_Params, { encode: false });
+        const paymentUrl = VNP_URL + '?' + qs.stringify(vnp_Params, { encode: false });
 
         return res.status(200).json({
             success: true,
@@ -98,7 +104,7 @@ const vnpayReturn = async (req, res) => {
 
         vnp_Params = sortObject(vnp_Params);
 
-        const signData = querystring.stringify(vnp_Params, { encode: false });
+        const signData = qs.stringify(vnp_Params, { encode: false });
         const hmac = crypto.createHmac('sha512', VNP_HASHSECRET);
         const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 

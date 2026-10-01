@@ -4,6 +4,8 @@ const Booking = require('../models/Booking');
 const User = require('../models/User');
 const { createAndSendNotification } = require('../services/notificationService');
 const { sendEmail, generateMeetingInviteHtml } = require('../services/emailService');
+const { acquireLock, releaseLock } = require('../utils/redisLock');
+const { scheduleCheckinDeadline, cancelCheckinDeadline } = require('../services/redisCheckinService');
 
 const createBooking = async (req, res) => {
   try {
@@ -35,16 +37,6 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Cannot book in the past
-    const now = new Date();
-    // Allow a small buffer (e.g., 1 minute) for network delay
-    if (start < new Date(now.getTime() - 60000)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot create booking in the past.'
-      });
-    }
-
     // Verify resource exists and belongs to the same tenant
     const resource = await Resource.findOne({ _id: resourceId, tenantId: req.user.tenantId });
     if (!resource) {
@@ -61,8 +53,43 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Working hours validation: 08:00 - 17:30 local time (Only for rooms / vehicles)
-    if (resource.type !== 'equipment') {
+    // Past time validation
+    const now = new Date();
+    if (resource.type === 'equipment') {
+      // Equipment is booked on a daily basis. If end time is in the past, reject.
+      if (end < now) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không thể mượn thiết bị ở thời gian trong quá khứ.'
+        });
+      }
+
+      // Check if borrow date is before today
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      if (start < todayStart) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không thể chọn ngày mượn trước ngày hôm nay.'
+        });
+      }
+
+      // If user selected today as borrowDate, start time might be 00:00:00.
+      // Auto-adjust start to current time so it is not in the past.
+      if (start < now) {
+        start.setTime(now.getTime());
+      }
+    } else {
+      // Rooms and vehicles: allow a small 2-minute buffer
+      if (start < new Date(now.getTime() - 2 * 60000)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không thể đặt lịch ở thời gian trong quá khứ.'
+        });
+      }
+    }
+
+    // Working hours validation: 08:00 - 17:30 local time (Only for meeting rooms)
+    if (resource.type === 'room') {
       const startHour = start.getHours();
       const startMin = start.getMinutes();
       const endHour = end.getHours();
@@ -93,18 +120,40 @@ const createBooking = async (req, res) => {
     // Determine initial status based on resource isAutoApprove flag
     const initialStatus = resource.isAutoApprove ? 'approved' : 'pending';
 
-    // Call service to check overlap and create booking
-    const booking = await bookingService.createBooking({
-      tenantId: req.user.tenantId,
-      userId: req.user.userId || req.user._id,
-      resourceId,
-      startTime: start,
-      endTime: end,
-      notes,
-      attendees: attendeesList,
-      quantity: Number(quantity) || 1,
-      status: initialStatus
-    });
+    // 🔒 REDIS DISTRIBUTED LOCK: Khóa tài nguyên trong 5s để chống 2 người đặt trùng cùng 1 mili-giây
+    const lockKey = `lock:resource:${resourceId}`;
+    const lockToken = await acquireLock(lockKey, 5);
+
+    if (!lockToken) {
+      return res.status(409).json({
+        success: false,
+        message: 'Tài nguyên này đang có người khác thao tác đặt chỗ cùng lúc. Vui lòng thử lại sau vài giây!'
+      });
+    }
+
+    let booking;
+    try {
+      // Call service to check overlap and create booking
+      booking = await bookingService.createBooking({
+        tenantId: req.user.tenantId,
+        userId: req.user.userId || req.user._id,
+        resourceId,
+        startTime: start,
+        endTime: end,
+        notes,
+        attendees: attendeesList,
+        quantity: Number(quantity) || 1,
+        status: initialStatus
+      });
+    } finally {
+      // 🔓 Luôn luôn mở khóa sau khi xong (kể cả khi thành công hoặc bị lỗi)
+      await releaseLock(lockKey, lockToken);
+    }
+
+    // ⏱️ REDIS CHECK-IN DEADLINE: Nếu phòng họp tự động duyệt -> Hẹn giờ 15p trên Redis
+    if (resource.type === 'room' && initialStatus === 'approved') {
+      scheduleCheckinDeadline(booking).catch(e => console.error('Redis check-in error:', e));
+    }
 
     // Send notifications (async, non-blocking)
     const currentUser = await User.findById(req.user.userId);
@@ -339,6 +388,13 @@ const updateBookingStatus = async (req, res) => {
       await Resource.findByIdAndUpdate(booking.resourceId?._id || booking.resourceId, {
         $inc: { quantity: qtyToRestore }
       });
+    }
+
+    // ⏱️ REDIS CHECK-IN DEADLINE: Quản lý lịch hẹn giờ trên Redis
+    if (status === 'approved' && booking.resourceId?.type === 'room') {
+      scheduleCheckinDeadline(booking).catch(e => console.error('Redis check-in error:', e));
+    } else if (['cancelled', 'rejected', 'checked_in', 'no_show', 'returned'].includes(status)) {
+      cancelCheckinDeadline(booking._id).catch(e => console.error('Redis check-in error:', e));
     }
 
     // Handle no_show violation penalty

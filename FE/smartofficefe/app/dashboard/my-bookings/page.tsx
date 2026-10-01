@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../../components/Sidebar';
 import NotificationBell from '../../components/NotificationBell';
 import UserProfileHeader from '../../components/UserProfileHeader';
-import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Package, LogOut, AlertTriangle } from 'lucide-react';
+import Link from 'next/link';
+import { Search, Calendar, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Package, LogOut, AlertTriangle, CreditCard, ExternalLink, Sparkles, DoorOpen, Radio, X } from 'lucide-react';
 import { bookingService } from '../../services/bookingService';
+import apiClient from '../../services/apiClient';
 import { Booking } from '../../types/api';
 import { UserInfo } from '../../store/authSlice';
 import { useRouter } from 'next/navigation';
@@ -22,6 +24,13 @@ export default function MyBookingsPage() {
     // Custom Modal & Toast States
     const [selectedCancelBooking, setSelectedCancelBooking] = useState<Booking | null>(null);
     const [statusToast, setStatusToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    // Demo Swipe Card Modal States
+    const [swipeModalBooking, setSwipeModalBooking] = useState<Booking | null>(null);
+    const [swipeCardCode, setSwipeCardCode] = useState('');
+    const [isSwiping, setIsSwiping] = useState(false);
+    const [swipeSuccess, setSwipeSuccess] = useState(false);
+    const [swipeMessage, setSwipeMessage] = useState<string | null>(null);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -69,6 +78,72 @@ export default function MyBookingsPage() {
             });
         } finally {
             setCancellingId(null);
+        }
+    };
+
+    // RFID Beep sound effect
+    const playBeepSound = () => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContextClass) return;
+            const audioCtx = new AudioContextClass();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime); // 880Hz crisp beep
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.22);
+        } catch (e) {
+            // Audio context not allowed or failed
+        }
+    };
+
+    // Open demo swipe modal
+    const handleOpenSwipeModal = (b: Booking) => {
+        setSwipeModalBooking(b);
+        setSwipeCardCode(user?.rfidCardId || user?.email || 'RFID-1004');
+        setSwipeSuccess(false);
+        setSwipeMessage(null);
+    };
+
+    // Execute swipe simulation
+    const handleExecuteSwipe = async () => {
+        if (!swipeModalBooking) return;
+        const rId = typeof swipeModalBooking.resourceId === 'object' ? (swipeModalBooking.resourceId as any)?._id : swipeModalBooking.resourceId;
+        if (!rId) return;
+
+        setIsSwiping(true);
+        setSwipeMessage(null);
+        try {
+            const cardToUse = swipeCardCode.trim() || user?.rfidCardId || user?.email || 'RFID-1004';
+            const res = await apiClient.post('/access-control/swipe', {
+                resourceId: rId,
+                cardCode: cardToUse,
+                bookingId: swipeModalBooking._id
+            });
+
+            if (res.data?.success) {
+                playBeepSound();
+                setSwipeSuccess(true);
+                setSwipeMessage(res.data.message || 'Cửa đã mở khóa thành công!');
+                setStatusToast({
+                    type: 'success',
+                    message: `🟢 Check-in phòng họp thành công! Lịch hẹn giờ hủy phòng sau 15 phút trên Redis đã được hủy tự động.`
+                });
+                setTimeout(() => {
+                    setSwipeModalBooking(null);
+                    fetchMyBookings();
+                }, 1600);
+            } else {
+                setSwipeMessage(res.data?.message || 'Quẹt thẻ không thành công.');
+            }
+        } catch (err: any) {
+            setSwipeMessage(err.response?.data?.message || 'Lỗi khi kết nối tới thiết bị quẹt thẻ.');
+        } finally {
+            setIsSwiping(false);
         }
     };
 
@@ -240,10 +315,10 @@ export default function MyBookingsPage() {
                                                          {b.status === 'pending' && <AlertCircle size={14} />}
                                                          {
                                                              ((b.status === 'checked_in' || b.status === 'overdue') && new Date() > new Date(b.endTime)) ? '⚠️ Quá hạn trả' :
-                                                             b.status === 'returned' ? 'Đã trả thiết bị' :
-                                                             b.status === 'approved' ? 'Đã duyệt' :
-                                                             b.status === 'checked_in' ? 'Đã giao thiết bị' :
-                                                             b.status === 'no_show' ? 'Báo không lấy' :
+                                                             b.status === 'returned' ? (resourceObj?.type === 'vehicle' ? 'Đã trả xe' : 'Đã trả thiết bị') :
+                                                             b.status === 'approved' ? (resourceObj?.type === 'room' ? 'Đã duyệt (Chờ Check-in)' : resourceObj?.type === 'vehicle' ? 'Đã duyệt (Chờ nhận xe)' : 'Đã duyệt') :
+                                                             b.status === 'checked_in' ? (resourceObj?.type === 'room' ? '🟢 Đang họp (Đã Check-in)' : resourceObj?.type === 'vehicle' ? '🟢 Đang sử dụng (Đã giao xe)' : 'Đã giao thiết bị') :
+                                                             b.status === 'no_show' ? (resourceObj?.type === 'room' ? '🔴 Hủy do quá hạn Check-in' : resourceObj?.type === 'vehicle' ? 'Không đến nhận xe' : 'Báo không lấy') :
                                                              b.status === 'rejected' ? 'Từ chối' :
                                                              b.status === 'confirmed' ? 'Xác nhận' :
                                                              b.status === 'cancelled' ? 'Đã hủy' : 'Chờ duyệt'
@@ -251,20 +326,34 @@ export default function MyBookingsPage() {
                                                      </span>
                                                  </td>
                                                  <td className="py-4 px-6 text-right">
-                                                     {(b.status === 'pending' || b.status === 'approved') && (
-                                                         <button
-                                                             onClick={() => setSelectedCancelBooking(b)}
-                                                             className="px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
-                                                         >
-                                                             <XCircle size={14} />
-                                                             Hủy đơn
-                                                         </button>
-                                                     )}
-                                                     {b.status === 'returned' && (
-                                                         <span className="text-xs font-bold text-teal-600 inline-flex items-center gap-1">
-                                                             <CheckCircle2 size={13} /> Hoàn tất
-                                                         </span>
-                                                     )}
+                                                     <div className="flex items-center justify-end gap-2">
+                                                         {/* Demo Quẹt Thẻ RFID (Dành cho phòng họp đã duyệt đang chờ check-in) */}
+                                                         {resourceObj?.type === 'room' && (b.status === 'approved' || b.status === 'confirmed') && (
+                                                             <button
+                                                                 onClick={() => handleOpenSwipeModal(b)}
+                                                                 className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm shadow-blue-200 inline-flex items-center gap-1.5 active:scale-95 animate-pulse hover:animate-none"
+                                                                 title="Mô phỏng quẹt thẻ RFID mở cửa check-in phòng họp"
+                                                             >
+                                                                 <CreditCard size={14} />
+                                                                 Demo Quẹt Thẻ
+                                                             </button>
+                                                         )}
+
+                                                         {(b.status === 'pending' || b.status === 'approved') && (
+                                                             <button
+                                                                 onClick={() => setSelectedCancelBooking(b)}
+                                                                 className="px-3.5 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm inline-flex items-center gap-1.5"
+                                                             >
+                                                                 <XCircle size={14} />
+                                                                 Hủy đơn
+                                                             </button>
+                                                         )}
+                                                         {b.status === 'returned' && (
+                                                             <span className="text-xs font-bold text-teal-600 inline-flex items-center gap-1">
+                                                                 <CheckCircle2 size={13} /> Hoàn tất
+                                                             </span>
+                                                         )}
+                                                     </div>
                                                  </td>
                                             </tr>
                                         );
@@ -314,6 +403,112 @@ export default function MyBookingsPage() {
                                     <>
                                         <XCircle size={16} />
                                         <span>Xác nhận Hủy</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Demo Smart Lock Swipe RFID Modal */}
+            {swipeModalBooking && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 flex flex-col items-center text-center relative animate-in zoom-in-95 duration-200">
+                        <button
+                            onClick={() => setSwipeModalBooking(null)}
+                            disabled={isSwiping}
+                            className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition cursor-pointer"
+                        >
+                            <X size={18} />
+                        </button>
+
+                        {/* Smart Lock Reader Graphic */}
+                        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-4 transition-all duration-300 shadow-xl ${
+                            swipeSuccess 
+                                ? 'bg-emerald-500 text-white shadow-emerald-200 scale-105 ring-8 ring-emerald-50' 
+                                : 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-blue-200 ring-8 ring-blue-50'
+                        }`}>
+                            {swipeSuccess ? (
+                                <DoorOpen size={36} className="animate-bounce" />
+                            ) : (
+                                <CreditCard size={36} className={isSwiping ? 'animate-pulse' : ''} />
+                            )}
+                        </div>
+
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold text-xs mb-2">
+                            <Radio size={14} className="animate-pulse text-blue-600" />
+                            <span>Mô Phỏng Cửa Thông Minh (Smart Lock)</span>
+                        </div>
+
+                        <h3 className="text-xl font-black text-gray-900 mb-1">
+                            {typeof swipeModalBooking.resourceId === 'object' ? swipeModalBooking.resourceId?.name : 'Phòng họp'}
+                        </h3>
+                        <p className="text-xs text-gray-500 mb-4">
+                            {typeof swipeModalBooking.resourceId === 'object' ? swipeModalBooking.resourceId?.location : 'Khu vực văn phòng'}
+                        </p>
+
+                        {/* Card input & info */}
+                        <div className="w-full bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-5 text-left">
+                            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">
+                                Mã thẻ RFID hoặc Email nhân viên
+                            </label>
+                            <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-200 px-3 py-2 shadow-sm focus-within:border-blue-500 transition">
+                                <CreditCard size={18} className="text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={swipeCardCode}
+                                    onChange={(e) => setSwipeCardCode(e.target.value)}
+                                    placeholder="RFID-1004"
+                                    disabled={isSwiping || swipeSuccess}
+                                    className="w-full text-xs font-mono font-bold text-gray-800 outline-none bg-transparent"
+                                />
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1.5">
+                                Hệ thống tự động điền mã thẻ RFID của bạn. Có thể chỉnh sửa để thử nghiệm.
+                            </p>
+                        </div>
+
+                        {/* Response Message */}
+                        {swipeMessage && (
+                            <div className={`w-full p-3 rounded-xl text-xs font-bold mb-4 animate-in fade-in ${
+                                swipeSuccess ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                            }`}>
+                                {swipeSuccess ? '🟢 ' : '⚠️ '} {swipeMessage}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-3 w-full">
+                            <button
+                                onClick={() => setSwipeModalBooking(null)}
+                                disabled={isSwiping}
+                                className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                Đóng
+                            </button>
+                            <button
+                                onClick={handleExecuteSwipe}
+                                disabled={isSwiping || swipeSuccess}
+                                className={`flex-1 py-3 px-4 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 ${
+                                    swipeSuccess 
+                                        ? 'bg-emerald-600 shadow-emerald-200' 
+                                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-200 active:scale-95'
+                                }`}
+                            >
+                                {isSwiping ? (
+                                    <>
+                                        <Loader2 className="animate-spin" size={16} />
+                                        <span>Đang đọc thẻ...</span>
+                                    </>
+                                ) : swipeSuccess ? (
+                                    <>
+                                        <CheckCircle2 size={16} />
+                                        <span>Cửa Đã Mở Khóa!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles size={16} />
+                                        <span>Chạm Thẻ Quẹt Ngay</span>
                                     </>
                                 )}
                             </button>

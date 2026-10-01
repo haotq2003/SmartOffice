@@ -247,10 +247,10 @@ export default function ManagerDashboardPage() {
                                                                 req.status === 'no_show' ? 'bg-purple-50 text-purple-600' :
                                                                 req.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
                                                             }`}>
-                                                                {req.status === 'approved' ? 'Đã duyệt' :
-                                                                 req.status === 'checked_in' ? 'Đã giao thiết bị' :
-                                                                 req.status === 'returned' ? 'Đã trả thiết bị' :
-                                                                 req.status === 'no_show' ? 'Báo không lấy' :
+                                                                {req.status === 'approved' ? (resourceObj?.type === 'room' ? 'Đã duyệt (Chờ Check-in)' : resourceObj?.type === 'vehicle' ? 'Đã duyệt (Chờ giao xe)' : 'Đã duyệt') :
+                                                                 req.status === 'checked_in' ? (resourceObj?.type === 'room' ? '🟢 Đang họp (Đã Check-in)' : resourceObj?.type === 'vehicle' ? '🟢 Đang sử dụng (Đã giao xe)' : 'Đã giao thiết bị') :
+                                                                 req.status === 'returned' ? (resourceObj?.type === 'vehicle' ? 'Đã trả xe' : 'Đã trả thiết bị') :
+                                                                 req.status === 'no_show' ? (resourceObj?.type === 'room' ? '🔴 Hủy do quá hạn Check-in' : resourceObj?.type === 'vehicle' ? 'Không đến nhận xe' : 'Báo không lấy') :
                                                                  req.status === 'rejected' ? 'Đã từ chối' : 'Chờ duyệt'}
                                                             </span>
                                                         );
@@ -294,7 +294,7 @@ export default function ManagerDashboardPage() {
                                             </div>
                                         )}
 
-                                        {req.status === 'approved' && resourceObj?.type === 'equipment' && (
+                                        {req.status === 'approved' && (resourceObj?.type === 'equipment' || resourceObj?.type === 'vehicle') && (
                                             <div className="flex items-center gap-2 w-full md:w-auto shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
                                                 <button
                                                     onClick={() => handleUpdateStatus(req._id, 'checked_in')}
@@ -312,12 +312,12 @@ export default function ManagerDashboardPage() {
                                                     title="Báo vi phạm không tới nhận đồ"
                                                 >
                                                     {isActionLoading ? <Loader2 className="animate-spin" size={14} /> : <XCircle size={14} />}
-                                                    Báo Không Lấy
+                                                    {resourceObj?.type === 'vehicle' ? 'Không Đến Nhận Xe' : 'Báo Không Lấy'}
                                                 </button>
                                             </div>
                                         )}
 
-                                        {req.status === 'checked_in' && resourceObj?.type === 'equipment' && (
+                                        {req.status === 'checked_in' && (resourceObj?.type === 'equipment' || resourceObj?.type === 'vehicle') && (
                                             <div className="flex items-center gap-2 w-full md:w-auto shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100">
                                                 <button
                                                     onClick={() => handleUpdateStatus(req._id, 'returned')}
@@ -326,7 +326,7 @@ export default function ManagerDashboardPage() {
                                                     title="Xác nhận nhân viên đã trả lại thiết bị về kho"
                                                 >
                                                     {isActionLoading ? <Loader2 className="animate-spin" size={14} /> : <CheckCircle2 size={14} />}
-                                                    Nhận lại thiết bị
+                                                    {resourceObj?.type === 'vehicle' ? 'Nhận lại xe & chìa khóa' : 'Nhận lại thiết bị'}
                                                 </button>
                                             </div>
                                         )}
