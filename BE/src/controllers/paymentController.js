@@ -55,6 +55,11 @@ const createPaymentUrl = async (req, res) => {
             ipAddr = '127.0.0.1';
         }
 
+        // Tự động nhận diện domain của Frontend đang gọi tới (Vercel hoặc localhost)
+        const frontendOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+        const baseReturnUrl = process.env.FRONTEND_URL || frontendOrigin || 'http://localhost:3000';
+        const returnUrl = process.env.VNP_RETURNURL || `${baseReturnUrl}/payment-return`;
+
         let vnp_Params = {};
         vnp_Params['vnp_Version'] = '2.1.0';
         vnp_Params['vnp_Command'] = 'pay';
@@ -65,7 +70,7 @@ const createPaymentUrl = async (req, res) => {
         vnp_Params['vnp_OrderInfo'] = orderInfo;
         vnp_Params['vnp_OrderType'] = orderType;
         vnp_Params['vnp_Amount'] = amountVND * 100; // VNPay requires amount * 100
-        vnp_Params['vnp_ReturnUrl'] = VNP_RETURNURL;
+        vnp_Params['vnp_ReturnUrl'] = returnUrl;
         vnp_Params['vnp_IpAddr'] = ipAddr;
         vnp_Params['vnp_CreateDate'] = createDate;
         if (req.body.bankCode) {
@@ -256,8 +261,12 @@ const createMomoUrl = async (req, res) => {
         const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO';
         const accessKey = process.env.MOMO_ACCESS_KEY || 'F8BBA842ECF85';
         const secretKey = process.env.MOMO_SECRET_KEY || 'K951B6PE1waDMi640xX08PD3vg6EkVlz';
-        const redirectUrl = process.env.MOMO_REDIRECT_URL || 'http://localhost:3000/payment-return';
-        const ipnUrl = process.env.MOMO_IPN_URL || 'http://localhost:3000/payment-return';
+
+        // Tự động nhận diện domain của Frontend đang gọi tới (Vercel hoặc localhost)
+        const frontendOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+        const baseReturnUrl = process.env.FRONTEND_URL || frontendOrigin || 'http://localhost:3000';
+        const redirectUrl = process.env.MOMO_REDIRECT_URL || `${baseReturnUrl}/payment-return`;
+        const ipnUrl = process.env.MOMO_IPN_URL || `${baseReturnUrl}/payment-return`;
 
         const preferredType = 'payWithATM';
         let result = await makeMomoRequest(preferredType, amountVND, partnerCode, accessKey, secretKey, redirectUrl, ipnUrl, planCode, months, tenantId).catch((err) => ({ responseData: { resultCode: 99, message: err.message } }));
