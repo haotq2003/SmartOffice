@@ -1,3 +1,4 @@
+const { acquireLock, releaseLock } = require('../utils/redisLock');
 const crypto = require('crypto');
 const qs = require('qs');
 const Tenant = require('../models/Tenant');
@@ -100,6 +101,9 @@ const createPaymentUrl = async (req, res) => {
 };
 
 const vnpayReturn = async (req, res) => {
+    let lockToken = null;
+    let lockKey = null;
+
     try {
         let vnp_Params = req.query;
         const secureHash = vnp_Params['vnp_SecureHash'];
@@ -116,6 +120,40 @@ const vnpayReturn = async (req, res) => {
         const isSuccess = secureHash === signed && vnp_Params['vnp_ResponseCode'] === '00';
 
         if (isSuccess) {
+            const txnRef = vnp_Params['vnp_TxnRef'];
+            if (!txnRef) {
+                return res.status(400).json({ success: false, message: 'Thiếu mã giao dịch vnp_TxnRef' });
+            }
+
+            // 1. Chống Race Condition: Chiếm Distributed Lock qua Redis
+            lockKey = `lock:payment:vnpay:${txnRef}`;
+            lockToken = await acquireLock(lockKey, 15);
+            if (!lockToken) {
+                console.warn(`[VNPay] Giao dịch ${txnRef} đang được một tiến trình khác xử lý.`);
+                return res.status(409).json({
+                    success: false,
+                    message: 'Giao dịch đang được xử lý, vui lòng không gửi yêu cầu trùng lặp.'
+                });
+            }
+
+            // 2. Chống Replay Attack & Double-Billing: Kiểm tra Transaction đã tồn tại chưa (Idempotency Check)
+            const existingTxn = await Transaction.findOne({
+                transactionRef: txnRef,
+                status: 'success'
+            });
+
+            if (existingTxn) {
+                console.log(`[VNPay Idempotency] Giao dịch ${txnRef} đã được xử lý thành công trước đó. Trả về kết quả an toàn.`);
+                return res.status(200).json({
+                    success: true,
+                    code: vnp_Params['vnp_ResponseCode'],
+                    message: 'Giao dịch đã được ghi nhận thành công trước đó (Idempotent Hit).',
+                    data: vnp_Params,
+                    isIdempotentHit: true
+                });
+            }
+
+            // 3. Tiến hành xử lý cộng hạn gói cước lần đầu
             const orderInfo = vnp_Params['vnp_OrderInfo'] || '';
             let planCode = 'premium';
             if (orderInfo.toLowerCase().includes('enterprise')) planCode = 'enterprise';
@@ -166,9 +204,11 @@ const vnpayReturn = async (req, res) => {
                     amountVND: parseInt(vnp_Params['vnp_Amount']) / 100 || 0,
                     months: monthsToAdd,
                     paymentMethod: 'vnpay',
-                    transactionRef: vnp_Params['vnp_TransactionNo'] || vnp_Params['vnp_TxnRef'] || `VNP_${Date.now()}`,
+                    transactionRef: txnRef, // Cố định bằng txnRef để chống trùng lặp tuyệt đối
                     status: 'success'
-                }).catch(e => console.error('Transaction log error:', e));
+                });
+
+                console.log(`[VNPay] Gia hạn thành công cho Tenant ${tenant.name || tenant._id} thêm ${monthsToAdd} tháng. Mã GD: ${txnRef}`);
             }
         }
 
@@ -181,6 +221,10 @@ const vnpayReturn = async (req, res) => {
     } catch (error) {
         console.error('Error verifying VNPay return:', error);
         return res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (lockKey && lockToken) {
+            await releaseLock(lockKey, lockToken);
+        }
     }
 };
 
@@ -294,11 +338,48 @@ const createMomoUrl = async (req, res) => {
 };
 
 const verifyMomoReturn = async (req, res) => {
+    let lockToken = null;
+    let lockKey = null;
+
     try {
         const { resultCode, orderInfo, amount, orderId, transId, extraData } = req.query;
         const isSuccess = resultCode === '0' || resultCode === 0;
 
         if (isSuccess) {
+            const txnRef = orderId || transId;
+            if (!txnRef) {
+                return res.status(400).json({ success: false, message: 'Thiếu mã đơn hàng MoMo (orderId)' });
+            }
+
+            // 1. Chống Race Condition: Chiếm Distributed Lock qua Redis
+            lockKey = `lock:payment:momo:${txnRef}`;
+            lockToken = await acquireLock(lockKey, 15);
+            if (!lockToken) {
+                console.warn(`[MoMo] Giao dịch ${txnRef} đang được một tiến trình khác xử lý.`);
+                return res.status(409).json({
+                    success: false,
+                    message: 'Giao dịch đang được xử lý, vui lòng không gửi yêu cầu trùng lặp.'
+                });
+            }
+
+            // 2. Chống Replay Attack & Double-Billing: Kiểm tra Transaction đã tồn tại chưa (Idempotency Check)
+            const existingTxn = await Transaction.findOne({
+                transactionRef: txnRef,
+                status: 'success'
+            });
+
+            if (existingTxn) {
+                console.log(`[MoMo Idempotency] Giao dịch ${txnRef} đã được xử lý thành công trước đó. Trả về kết quả an toàn.`);
+                return res.status(200).json({
+                    success: true,
+                    code: resultCode,
+                    message: 'Giao dịch MoMo đã được ghi nhận thành công trước đó (Idempotent Hit).',
+                    data: req.query,
+                    isIdempotentHit: true
+                });
+            }
+
+            // 3. Tiến hành xử lý cộng hạn gói cước lần đầu
             const infoStr = orderInfo || '';
             let planCode = 'premium';
             if (infoStr.toLowerCase().includes('free')) planCode = 'free';
@@ -361,9 +442,11 @@ const verifyMomoReturn = async (req, res) => {
                     amountVND,
                     months: paidMonths || 12,
                     paymentMethod: 'momo',
-                    transactionRef: orderId || transId || `MOMO_${Date.now()}`,
+                    transactionRef: txnRef, // Cố định bằng txnRef để làm khoá đối soát duy nhất
                     status: 'success'
-                }).catch(e => console.error('Transaction log error:', e));
+                });
+
+                console.log(`[MoMo] Gia hạn thành công cho Tenant ${tenant.name || tenant._id} thêm ${paidMonths || 12} tháng. Mã GD: ${txnRef}`);
             }
         }
 
@@ -375,6 +458,10 @@ const verifyMomoReturn = async (req, res) => {
         });
     } catch (error) {
         return res.status(500).json({ success: false, message: error.message });
+    } finally {
+        if (lockKey && lockToken) {
+            await releaseLock(lockKey, lockToken);
+        }
     }
 };
 

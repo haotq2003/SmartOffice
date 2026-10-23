@@ -15,6 +15,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const accessControlRoutes = require('./routes/accessControlRoutes');
 const planRoutes = require('./routes/planRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const redis = require('./config/redis');
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/access-control', accessControlRoutes);
 app.use('/api', bookingRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Redis Healthcheck & Demo route
 app.get('/api/redis-health', async (req, res) => {
